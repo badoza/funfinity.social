@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Funfinity | Laugh. Connect. Belong.</title>
+    <meta name="description" content="Welcome to Funfinity, run by Tilak Dongare in Gokak. More than a community, a place that feels like home. Join us for fun events, meaningful connections, and good vibes.">
+    <meta name="keywords" content="Funfinity, Gokak community, Tilak Dongare, social club, meetups, networking, events in Gokak, make friends">
+    
+    <!-- Open Graph / Social Media Meta Tags -->
+    <meta property="og:title" content="Funfinity | Laugh. Connect. Belong.">
+    <meta property="og:description" content="Maybe the people you're looking for, are looking for you too! Join Funfinity today.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://funfinity.social">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            bg: '#FDFBF7',      // Warm off-white sand
+                            text: '#4A3B32',    // Deep earthy brown
+                            accent: '#D48847',  // Caramel/Orange from logo
+                            light: '#F3E8D8',   // Lighter beige for cards
+                        },
+                        pastel: {
+                            orange: '#F4D3B8',
+                            green: '#D3E0C9',
+                            pink: '#F0D1D1',
+                            blue: '#CFE0E8',
+                            yellow: '#F5E4B5'
+                        }
+                    },
+                    fontFamily: {
+                        display: ['Fredoka', 'sans-serif'], // Friendly, rounded font similar to images
+                        body: ['Nunito', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Schema.org Markup for SEO / LLMO / GEO -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SocialMediaPosting",
+      "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://funfinity.social"
+      },
+      "headline": "Funfinity - A Community by Tilak Dongare",
+      "description": "More than a community, a place that feels like home. Connecting people through events, laughter, and meaningful conversations in Gokak.",
+      "author": {
+        "@type": "Person",
+        "name": "Tilak Dongare"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Funfinity",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://funfinity.social/logo.png"
+        }
+      },
+      "location": {
+        "@type": "Place",
+        "name": "Gokak, Karnataka, India"
+      }
+    }
+    </script>
+
+    <style>
+        body {
+            background-color: theme('colors.brand.bg');
+            color: theme('colors.brand.text');
+            font-family: theme('fontFamily.body');
+        }
+        h1, h2, h3, h4 {
+            font-family: theme('fontFamily.display');
+        }
+        .hero-pattern {
+            background-image: linear-gradient(rgba(74, 59, 50, 0.6), rgba(212, 136, 71, 0.5)), url('https://images.unsplash.com/photo-1529156069898-49953eb1b5a4?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80');
+            background-size: cover;
+            background-position: center;
+        }
+        /* Custom infinity logo recreation in CSS/SVG */
+        .svg-logo {
+            fill: none;
+            stroke: theme('colors.brand.accent');
+            stroke-width: 8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Navigation -->
+    <nav class="fixed w-full z-50 bg-[#FDFBF7]/90 backdrop-blur-md border-b border-brand-accent/20 transition-all duration-300" id="navbar">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-20 items-center">
+                <!-- Logo -->
+                <div class="flex-shrink-0 flex items-center gap-2 cursor-pointer" onclick="window.scrollTo(0,0)">
+                    <svg width="45" height="40" viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Eyes -->
+                        <circle cx="28" cy="35" r="5" fill="#4A3B32" />
+                        <circle cx="72" cy="35" r="5" fill="#4A3B32" />
+                        <!-- Infinity Path -->
+                        <path class="svg-logo" d="M 45 45 C 35 55, 10 55, 10 35 C 10 15, 35 15, 45 25 L 55 35 C 65 45, 90 45, 90 25 C 90 5, 65 5, 55 15 Z" />
+                        <!-- Smile -->
+                        <path class="svg-logo" d="M 30 65 Q 50 80 70 65" />
+                    </svg>
+                    <span class="font-display font-bold text-3xl tracking-tight text-brand-text">Funfinity</span>
+                </div>
+                
+                <!-- Desktop Menu -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#about" class="font-semibold text-brand-text hover:text-brand-accent transition-colors">About</a>
+                    <a href="#features" class="font-semibold text-brand-text hover:text-brand-accent transition-colors">What We Do</a>
+                    <a href="#community" class="font-semibold text-brand-text hover:text-brand-accent transition-colors">Community</a>
+                    <a href="https://www.instagram.com/funfinity.social" target="_blank" class="bg-brand-accent hover:bg-brand-text text-white px-6 py-2 rounded-full font-bold transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1">
+                        Join Waitlist
+                    </a>
+                </div>
+
+                <!-- Mobile menu button -->
+                <div class="md:hidden flex items-center">
+                    <button id="mobile-menu-btn" class="text-brand-text hover:text-brand-accent focus:outline-none">
+                        <i class="fas fa-bars text-2xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Mobile Menu -->
+        <div id="mobile-menu" class="hidden md:hidden bg-brand-bg border-t border-brand-accent/20">
+            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                <a href="#about" class="block px-3 py-2 text-base font-semibold text-brand-text">About</a>
+                <a href="#features" class="block px-3 py-2 text-base font-semibold text-brand-text">What We Do</a>
+                <a href="#community" class="block px-3 py-2 text-base font-semibold text-brand-text">Community</a>
+                <a href="https://www.instagram.com/funfinity.social" class="block px-3 py-2 text-base font-semibold text-brand-accent">Join Waitlist</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero-pattern min-h-screen flex items-center justify-center pt-20">
+        <div class="text-center px-4 max-w-4xl mx-auto">
+            <div class="inline-block bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-6 py-2 mb-6 animate-fade-in-up">
+                <span class="text-white font-semibold flex items-center gap-2">
+                    <i class="fas fa-sun text-yellow-300"></i> Gokak's Newest Community
+                </span>
+            </div>
+            <h1 class="text-5xl md:text-7xl font-display font-bold text-white mb-6 leading-tight shadow-sm">
+                Maybe the people you're looking for, <br/><span class="text-brand-accent drop-shadow-md">are looking for you too.</span>
+            </h1>
+            <p class="text-xl md:text-2xl text-white/90 mb-10 font-medium">
+                More than a community, a place that feels like home. <br class="hidden md:block"/> Connect, Share, and Belong.
+            </p>
+            <div class="flex flex-col sm:flex-row gap-4 justify-center">
+                <a href="#features" class="bg-brand-accent hover:bg-orange-500 text-white px-8 py-4 rounded-full font-bold text-lg transition-all shadow-xl hover:shadow-2xl transform hover:-translate-y-1">
+                    Explore Funfinity
+                </a>
+                <a href="https://www.instagram.com/funfinity.social" target="_blank" class="bg-white hover:bg-gray-100 text-brand-text px-8 py-4 rounded-full font-bold text-lg transition-all shadow-xl flex items-center justify-center gap-2">
+                    <i class="fab fa-instagram text-xl"></i> Follow Us
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="py-20 bg-brand-bg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <i class="far fa-heart text-3xl text-brand-accent mb-4"></i>
+                <h2 class="text-4xl md:text-5xl font-display font-bold text-brand-text mb-4">What is Funfinity?</h2>
+                <p class="text-xl text-brand-text/80 max-w-2xl mx-auto">
+                    Fun + Infinity = Endless connections, endless memories. Founded by <span class="font-bold text-brand-accent">Tilak Dongare</span>, we are building a space where you can truly be yourself.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center mt-12">
+                <div class="p-6">
+                    <div class="w-16 h-16 mx-auto bg-pastel-orange rounded-full flex items-center justify-center mb-4 text-brand-text text-2xl">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <h3 class="font-display font-bold text-lg mb-2">Real People</h3>
+                    <p class="text-sm text-brand-text/70">Togetherness & community</p>
+                </div>
+                <div class="p-6">
+                    <div class="w-16 h-16 mx-auto bg-pastel-yellow rounded-full flex items-center justify-center mb-4 text-brand-text text-2xl">
+                        <i class="fas fa-tree"></i>
+                    </div>
+                    <h3 class="font-display font-bold text-lg mb-2">Good Vibes</h3>
+                    <p class="text-sm text-brand-text/70">Positive energy always</p>
+                </div>
+                <div class="p-6">
+                    <div class="w-16 h-16 mx-auto bg-pastel-blue rounded-full flex items-center justify-center mb-4 text-brand-text text-2xl">
+                        <i class="fas fa-music"></i>
+                    </div>
+                    <h3 class="font-display font-bold text-lg mb-2">Great Times</h3>
+                    <p class="text-sm text-brand-text/70">Laughter, music & more</p>
+                </div>
+                <div class="p-6">
+                    <div class="w-16 h-16 mx-auto bg-pastel-pink rounded-full flex items-center justify-center mb-4 text-brand-text text-2xl">
+                        <i class="fas fa-camera"></i>
+                    </div>
+                    <h3 class="font-display font-bold text-lg mb-2">Memories</h3>
+                    <p class="text-sm text-brand-text/70">Moments to cherish forever</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section (From the Infographic) -->
+    <section id="features" class="py-20 bg-brand-light">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl md:text-5xl font-display font-bold text-brand-text mb-4">You bring yourself,<br/>we bring the <span class="text-brand-accent">Infinity</span>.</h2>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-16 relative">
+                <!-- Divider line for desktop -->
+                <div class="hidden md:block absolute top-0 bottom-0 left-1/2 w-px bg-brand-text/10 -ml-px"></div>
+                
+                <!-- Center Logo for desktop -->
+                <div class="hidden md:flex absolute top-1/2 left-1/2 -ml-10 -mt-10 w-20 h-20 bg-brand-text rounded-full items-center justify-center z-10 border-4 border-brand-light">
+                     <svg width="40" height="35" viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="28" cy="35" r="5" fill="#D48847" />
+                        <circle cx="72" cy="35" r="5" fill="#D48847" />
+                        <path fill="none" stroke="#D48847" stroke-width="8" stroke-linecap="round" d="M 45 45 C 35 55, 10 55, 10 35 C 10 15, 35 15, 45 25 L 55 35 C 65 45, 90 45, 90 25 C 90 5, 65 5, 55 15 Z" />
+                        <path fill="none" stroke="#D48847" stroke-width="8" stroke-linecap="round" d="M 30 65 Q 50 80 70 65" />
+                    </svg>
+                </div>
+
+                <!-- Left Column -->
+                <div class="space-y-8">
+                    <h3 class="text-2xl font-display font-bold text-brand-text text-center border-b-2 border-brand-text/20 pb-4 mb-8">What Funfinity Will Be Doing</h3>
+                    
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0 w-12 h-12 bg-pastel-orange rounded-full flex items-center justify-center text-xl">
+                            <i class="far fa-calendar-star"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-lg">Fun Events & Activities</h4>
+                            <p class="text-brand-text/80 text-sm">Exciting meetups, games, challenges, and experiences to keep things fun!</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0 w-12 h-12 bg-pastel-green rounded-full flex items-center justify-center text-xl">
+                            <i class="fas fa-user-friends"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-lg">Build Meaningful Connections</h4>
+                            <p class="text-brand-text/80 text-sm">Helping you meet like-minded people and create real friendships.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0 w-12 h-12 bg-pastel-pink rounded-full flex items-center justify-center text-xl">
+                            <i class="far fa-comments"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-lg">Engaging Conversations</h4>
+                            <p class="text-brand-text/80 text-sm">Open, positive, and fun conversations that bring us closer.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0 w-12 h-12 bg-pastel-yellow rounded-full flex items-center justify-center text-xl">
+                            <i class="fas fa-glass-cheers"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-lg">Laughs & Good Vibes Only</h4>
+                            <p class="text-brand-text/80 text-sm">A space where you can be yourself, relax and enjoy every moment.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0 w-12 h-12 bg-pastel-blue rounded-full flex items-center justify-center text-xl">
+                            <i class="fas fa-globe"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-lg">Grow Your Network</h4>
+                            <p class="text-brand-text/80 text-sm">Connect, collaborate and create new opportunities together.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="space-y-8">
+                    <h3 class="text-2xl font-display font-bold text-brand-text text-center border-b-2 border-brand-text/20 pb-4 mb-8">What Funfinity Will Give You Back</h3>
+                    
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0 w-12 h-12 bg-pastel-green rounded-full flex items-center justify-center text-xl">
+                            <i class="far fa-smile-beam"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-lg">Happiness & Positivity</h4>
+                            <p class="text-brand-text/80 text-sm">A constant dose of laughter, fun and good energy.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0 w-12 h-12 bg-pastel-blue rounded-full flex items-center justify-center text-xl">
+                            <i class="fas fa-heart"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-lg">Amazing People</h4>
+                            <p class="text-brand-text/80 text-sm">Meet supportive, friendly and like-minded people.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0 w-12 h-12 bg-pastel-pink rounded-full flex items-center justify-center text-xl">
+                            <i class="fas fa-home"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-lg">A Sense of Belonging</h4>
+                            <p class="text-brand-text/80 text-sm">A safe, inclusive and welcoming space where you truly belong.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0 w-12 h-12 bg-pastel-yellow rounded-full flex items-center justify-center text-xl">
+                            <i class="far fa-star"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-lg">Memories That Matter</h4>
+                            <p class="text-brand-text/80 text-sm">Unforgettable moments, experiences and stories together.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-4">
+                        <div class="flex-shrink-0 w-12 h-12 bg-pastel-blue rounded-full flex items-center justify-center text-xl">
+                            <i class="fas fa-rocket"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-lg">Growth & Opportunities</h4>
+                            <p class="text-brand-text/80 text-sm">New connections, collaborations and possibilities for your future.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Image Gallery / Vibes -->
+    <section id="community" class="py-20 bg-brand-bg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-12">
+                <h2 class="text-4xl font-display font-bold mb-4">The Funfinity Vibe</h2>
+                <p class="text-lg text-brand-text/80">Campfires, jamming, deep conversations, and new beginnings.</p>
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <img src="https://images.unsplash.com/photo-1527529482837-4698179dc6ce?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Friends laughing at a party" class="w-full h-64 object-cover rounded-2xl hover:opacity-90 transition-opacity">
+                <img src="https://images.unsplash.com/photo-1517457373958-b7bdd4587205?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Group of friends talking" class="w-full h-64 object-cover rounded-2xl hover:opacity-90 transition-opacity">
+                <img src="https://images.unsplash.com/photo-1478147427282-58a87119b581?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Playing guitar" class="w-full h-64 object-cover rounded-2xl hover:opacity-90 transition-opacity">
+                <img src="https://images.unsplash.com/photo-1523580494863-6f3031224c94?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Campfire gathering" class="w-full h-64 object-cover rounded-2xl hover:opacity-90 transition-opacity">
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="py-24 bg-brand-text text-brand-bg text-center">
+        <div class="max-w-3xl mx-auto px-4">
+            <h2 class="text-4xl md:text-5xl font-display font-bold mb-6 text-brand-accent">Something Special is Coming Soon.</h2>
+            <p class="text-xl mb-10 opacity-90">Be the first to know when we launch our first event in Gokak. Join the inner circle today.</p>
+            
+            <form class="flex flex-col sm:flex-row gap-4 justify-center max-w-lg mx-auto" onsubmit="event.preventDefault(); alert('Thanks for subscribing! We will reach out soon.');">
+                <input type="email" placeholder="Enter your email" required class="px-6 py-4 rounded-full text-brand-text focus:outline-none focus:ring-4 focus:ring-brand-accent/50 flex-grow">
+                <button type="submit" class="bg-brand-accent hover:bg-orange-500 text-white px-8 py-4 rounded-full font-bold transition-all whitespace-nowrap">
+                    Stay Tuned!
+                </button>
+            </form>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-brand-bg border-t border-brand-text/10 pt-16 pb-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-6">
+                <!-- Logo -->
+                <div class="flex items-center gap-2">
+                     <svg width="35" height="30" viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="28" cy="35" r="5" fill="#4A3B32" />
+                        <circle cx="72" cy="35" r="5" fill="#4A3B32" />
+                        <path class="svg-logo" d="M 45 45 C 35 55, 10 55, 10 35 C 10 15, 35 15, 45 25 L 55 35 C 65 45, 90 45, 90 25 C 90 5, 65 5, 55 15 Z" />
+                        <path class="svg-logo" d="M 30 65 Q 50 80 70 65" />
+                    </svg>
+                    <span class="font-display font-bold text-2xl text-brand-text">Funfinity</span>
+                </div>
+
+                <!-- Links -->
+                <div class="flex gap-6 text-brand-text/70 font-semibold">
+                    <a href="#about" class="hover:text-brand-accent">About</a>
+                    <a href="#features" class="hover:text-brand-accent">Features</a>
+                    <a href="mailto:hello@funfinity.social" class="hover:text-brand-accent">Contact</a>
+                </div>
+
+                <!-- Social -->
+                <div class="flex gap-4">
+                    <a href="https://www.instagram.com/funfinity.social" target="_blank" class="w-10 h-10 rounded-full bg-brand-text text-white flex items-center justify-center hover:bg-brand-accent transition-colors">
+                        <i class="fab fa-instagram"></i>
+                    </a>
+                </div>
+            </div>
+            
+            <div class="text-center mt-12 text-sm text-brand-text/50">
+                <p>&copy; 2026 Funfinity Social. Founded by Tilak Dongare.</p>
+                <p class="mt-1 flex items-center justify-center gap-1">
+                    <i class="fas fa-map-marker-alt text-brand-accent"></i> Gokak, Karnataka
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Interactivity Script -->
+    <script>
+        // Mobile Menu Toggle
+        const btn = document.getElementById('mobile-menu-btn');
+        const menu = document.getElementById('mobile-menu');
+
+        btn.addEventListener('click', () => {
+            menu.classList.toggle('hidden');
+        });
+
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('navbar');
+            if (window.scrollY > 10) {
+                nav.classList.add('shadow-md');
+            } else {
+                nav.classList.remove('shadow-md');
+            }
+        });
+    </script>
+</body>
+</html>
