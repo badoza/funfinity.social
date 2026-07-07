@@ -759,7 +759,7 @@ export default function FunfinityApp() {
           <h3 className="text-2xl font-bold text-[#4A3B32] mb-2">Have questions or want to partner?</h3>
           <p className="text-[#4A3B32]/70 mb-8 max-w-lg mx-auto">We are always looking for amazing venues, hosts, and community members to join the Funfinity family.</p>
           <a href="mailto:tilakdongare064@gmail.com" className="inline-flex items-center justify-center gap-3 bg-gradient-to-r from-[#4A3B32] to-[#2c221c] text-white px-8 py-4 rounded-full font-bold hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
-            <MessageCircle size={20} /> drop an email
+            <MessageCircle size={20} /> drop an email to Tilak
           </a>
           
           <div className="mt-16 flex flex-col md:flex-row justify-between items-center w-full border-t border-gray-200 pt-8 px-4 gap-4">
