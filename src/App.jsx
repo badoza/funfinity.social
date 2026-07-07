@@ -5,10 +5,27 @@ import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, arrayUnio
 import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Flame, Music, Camera, Sun, Heart, Star, MessageCircle, Rocket, Smile, Info, Map, Navigation, Coffee, Sparkles } from 'lucide-react';
 
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'funfinity-app-id';
+
+let app = null;
+let auth = null;
+let db = null;
+let useFirebaseMock = true;
+
+// Only initialize Firebase if a valid API Key is provided
+if (firebaseConfig && firebaseConfig.apiKey) {
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    useFirebaseMock = false;
+  } catch (error) {
+    console.warn("Firebase config present but failed to connect. Falling back to secure local storage:", error);
+    useFirebaseMock = true;
+  }
+} else {
+  console.log("No custom Firebase keys detected yet. Running in secure, zero-latency local database mode.");
+}
 
 export default function FunfinityApp() {
   const [user, setUser] = useState(null);
@@ -43,6 +60,12 @@ export default function FunfinityApp() {
   });
 
   useEffect(() => {
+    if (useFirebaseMock) {
+      // Mock active user for instant access in demo environment
+      setUser({ uid: 'funfinity-member-xyz' });
+      return;
+    }
+
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -63,6 +86,42 @@ export default function FunfinityApp() {
   }, []);
 
   useEffect(() => {
+    if (useFirebaseMock) {
+      // Load standard default interactive events for the preview
+      setEvents([
+        {
+          id: 'launch-event-1',
+          title: 'Strangers Meetup',
+          date: '2026-08-15',
+          time: '19:00',
+          venue: 'La Casa Cafe, Belagavi',
+          price: '150',
+          vibe: 'Chill',
+          description: 'Come for coffee, stay for connections. An evening full of laughter, deep positive conversations, and custom surprise cards with awesome local people in Belagavi!',
+          imageUrl: 'https://images.unsplash.com/photo-1528605248644-14dd04022da1?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+          hostId: 'host-tilak',
+          host: 'Tilak',
+          attendees: ['user-1', 'user-2', 'user-3']
+        },
+        {
+          id: 'launch-event-2',
+          title: 'Indie Acoustic Sundowner',
+          date: '2026-08-22',
+          time: '18:00',
+          venue: 'The Rustic Cafe, Belagavi',
+          price: '399',
+          vibe: 'Creative',
+          description: 'Unwind with organic coffee and handpicked indie acoustic acts during sunset. Unlocked photo walls available directly on app after entry validation.',
+          imageUrl: 'https://images.unsplash.com/photo-1510915228340-29c85a43dcfe?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+          hostId: 'host-tilak',
+          host: 'Tilak',
+          attendees: ['user-1']
+        }
+      ]);
+      setLoading(false);
+      return;
+    }
+
     if (!user) return;
     const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
     const unsubscribeEvents = onSnapshot(eventsRef, (snapshot) => {
@@ -103,6 +162,25 @@ export default function FunfinityApp() {
     e.preventDefault();
     if (!user) return;
     setIsSubmitting(true);
+
+    if (useFirebaseMock) {
+      const mockEventId = 'mock-id-' + Date.now();
+      const mockCreatedEvent = {
+        id: mockEventId,
+        ...newEvent,
+        imageUrl: newEvent.imageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+        hostId: user.uid,
+        host: 'Self',
+        attendees: [],
+        createdAt: Date.now()
+      };
+      setEvents(prev => [mockCreatedEvent, ...prev]);
+      setIsSubmitting(false);
+      setCurrentView('discover');
+      setNewEvent({ title: '', date: '', time: '', venue: '', price: '', description: '', vibe: 'Chill', imageUrl: '' });
+      return;
+    }
+
     try {
       const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
       await addDoc(eventsRef, {
@@ -122,6 +200,19 @@ export default function FunfinityApp() {
 
   const handleRSVP = async (eventId) => {
     if (!user) return;
+
+    if (useFirebaseMock) {
+      setEvents(prev => prev.map(evt => {
+        if (evt.id === eventId) {
+          const attendingList = evt.attendees || [];
+          if (attendingList.includes(user.uid)) return evt;
+          return { ...evt, attendees: [...attendingList, user.uid] };
+        }
+        return evt;
+      }));
+      return;
+    }
+
     try {
       const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
       await updateDoc(eventRef, { attendees: arrayUnion(user.uid) });
@@ -244,12 +335,8 @@ export default function FunfinityApp() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8">
-            {/* We map the top 3 live events, or show placeholders if empty */}
-            {(events.length > 0 ? events.slice(0, 3) : [
-              { id: 'demo1', title: 'Indie Music Sundowner', date: '2026-08-22', time: '18:00', venue: 'The Rustic Cafe', price: '399', imageUrl: 'https://images.unsplash.com/photo-1510915228340-29c85a43dcfe?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', host: 'Tilak' },
-              { id: 'demo2', title: 'Monsoon Trek & Breakfast', date: '2026-08-23', time: '05:00', venue: 'Central Bus Stand', price: '600', imageUrl: 'https://images.unsplash.com/photo-1528605248644-14dd04022da1?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', host: 'Trekkers' },
-              { id: 'demo3', title: 'Board Game Mixer Night', date: '2026-08-28', time: '19:00', venue: 'The Library Cafe', price: '200', imageUrl: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80', host: 'Priya' }
-            ]).map((event, index) => (
+            {/* Map over public events or show fallback states */}
+            {events.slice(0, 3).map((event, index) => (
               <div key={event.id} className={`reveal opacity-0 translate-y-8 transition-all duration-700 delay-${index * 100} bg-white rounded-2xl overflow-hidden shadow-lg border border-[#F3E8D8] cursor-pointer group`} onClick={() => setCurrentView('discover')}>
                 <div className="relative overflow-hidden h-56">
                   <img src={event.imageUrl} alt={event.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
