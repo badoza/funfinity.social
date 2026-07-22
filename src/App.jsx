@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, arrayUnion } from 'firebase/firestore';
 import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, MessageCircle, Info, Map as MapIcon, Navigation, Coffee, Sparkles, User, LogOut, Settings, CheckCircle, XCircle, QrCode, Image as ImageIcon, Megaphone, Edit3, Lock, Ticket, MapPinned, PlayCircle, Trash2, ShieldAlert } from 'lucide-react';
 
@@ -16,7 +16,9 @@ const myFirebaseConfig = {
 
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myFirebaseConfig;
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'funfinity-production';
-const ADMIN_EMAIL = 'tilakdongare064@gmail.com';
+
+// The Super Admins Array
+const ADMIN_EMAILS = ['tilakdongare064@gmail.com', 'dodge.kunal@gmail.com'];
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -31,7 +33,11 @@ export default function FunfinityApp() {
   const [currentView, setCurrentView] = useState('home'); 
   const [loading, setLoading] = useState(true);
   
+  // Auth State
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
   
   const [showPaymentModal, setShowPaymentModal] = useState(null); 
@@ -68,6 +74,14 @@ export default function FunfinityApp() {
     setTimeout(() => setToast(null), 4000);
   };
 
+  const openAuthModal = () => {
+    setAuthEmail('');
+    setAuthPassword('');
+    setAuthError('');
+    setAuthMode('login');
+    setShowAuthModal(true);
+  };
+
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -84,7 +98,7 @@ export default function FunfinityApp() {
 
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (currentUser?.email === ADMIN_EMAIL) {
+      if (currentUser?.email && ADMIN_EMAILS.includes(currentUser.email.toLowerCase())) {
         setUserRole('admin');
       } else if (currentUser && !currentUser.isAnonymous) {
         setUserRole('user');
@@ -131,6 +145,31 @@ export default function FunfinityApp() {
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
       showToast("Successfully logged in! Welcome to Funfinity.");
+    } catch (err) {
+      setAuthError(err.message.replace('Firebase:', '').trim());
+    }
+  };
+
+  const handleEmailAuth = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    
+    // Master Admin Lockout Rule
+    if (authEmail.toLowerCase().trim() === 'tilakdongare064@gmail.com') {
+      setAuthError("Security Guard: The Master Admin must use 'Continue with Google'.");
+      return;
+    }
+
+    try {
+      if (authMode === 'signup') {
+        await createUserWithEmailAndPassword(auth, authEmail, authPassword);
+        setShowAuthModal(false);
+        showToast("Account created successfully! Welcome.");
+      } else {
+        await signInWithEmailAndPassword(auth, authEmail, authPassword);
+        setShowAuthModal(false);
+        showToast("Successfully logged in!");
+      }
     } catch (err) {
       setAuthError(err.message.replace('Firebase:', '').trim());
     }
@@ -323,7 +362,7 @@ export default function FunfinityApp() {
             <button onClick={() => setCurrentView('discover')} className="bg-[#4A3B32] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-black transition-all shadow-xl hover:-translate-y-1 flex items-center justify-center gap-2 group">
               <Search size={20} className="group-hover:rotate-12 transition-transform" /> Explore Events
             </button>
-            <button onClick={() => { userRole !== 'guest' ? setCurrentView('create') : setShowAuthModal(true) }} className="bg-white text-[#4A3B32] border-2 border-[#F3E8D8] px-8 py-4 rounded-full font-bold text-lg hover:border-[#D48847] hover:bg-orange-50 transition-all shadow-sm flex items-center justify-center gap-2">
+            <button onClick={() => { userRole !== 'guest' ? setCurrentView('create') : openAuthModal() }} className="bg-white text-[#4A3B32] border-2 border-[#F3E8D8] px-8 py-4 rounded-full font-bold text-lg hover:border-[#D48847] hover:bg-orange-50 transition-all shadow-sm flex items-center justify-center gap-2">
               <User size={20} /> {userRole !== 'guest' ? 'Host an Event' : 'Join the Club'}
             </button>
           </div>
@@ -556,7 +595,7 @@ export default function FunfinityApp() {
           </div>
           <h2 className="text-3xl font-bold text-[#4A3B32] mb-4">Host Verification Required</h2>
           <p className="text-gray-500 mb-8 font-medium">To maintain the highest quality and safety for the Funfinity community, all hosts must log in to create events.</p>
-          <button onClick={() => setShowAuthModal(true)} className="bg-[#4A3B32] text-white px-8 py-4 rounded-full font-bold shadow-lg hover:bg-black transition-all transform hover:-translate-y-1 w-full">
+          <button onClick={() => openAuthModal()} className="bg-[#4A3B32] text-white px-8 py-4 rounded-full font-bold shadow-lg hover:bg-black transition-all transform hover:-translate-y-1 w-full">
             Log in to Host
           </button>
         </div>
@@ -819,7 +858,7 @@ export default function FunfinityApp() {
                   </div>
                 </div>
               ) : (
-                <button onClick={() => setShowAuthModal(true)} className="bg-[#4A3B32] text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-black transition-all shadow-md hover:-translate-y-0.5">
+                <button onClick={() => openAuthModal()} className="bg-[#4A3B32] text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-black transition-all shadow-md hover:-translate-y-0.5">
                   Sign In
                 </button>
               )}
@@ -849,7 +888,7 @@ export default function FunfinityApp() {
           <PlusCircle size={22} strokeWidth={currentView === 'create' ? 2.5 : 2} />
           <span className="text-[10px] font-bold mt-0.5">Host</span>
         </button>
-        <button onClick={() => (!user || user.isAnonymous) && setShowAuthModal(true)} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${user && !user.isAnonymous ? 'text-[#D48847]' : 'text-gray-400 hover:text-gray-600'}`}>
+        <button onClick={() => (!user || user.isAnonymous) && openAuthModal()} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${user && !user.isAnonymous ? 'text-[#D48847]' : 'text-gray-400 hover:text-gray-600'}`}>
           <User size={22} strokeWidth={user && !user.isAnonymous ? 2.5 : 2} />
           <span className="text-[10px] font-bold mt-0.5">{user && !user.isAnonymous ? 'Profile' : 'Sign In'}</span>
         </button>
@@ -874,7 +913,7 @@ export default function FunfinityApp() {
         </div>
       </footer>
 
-      {/* Auth Modal (Google Only) */}
+      {/* Auth Modal */}
       {showAuthModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20">
@@ -884,8 +923,31 @@ export default function FunfinityApp() {
                 <button onClick={() => setShowAuthModal(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors"><XCircle size={24} /></button>
               </div>
               <h2 className="text-3xl font-bold text-[#4A3B32] mb-2">Join the Club</h2>
-              <p className="text-gray-500 font-medium mb-8">Sign in with Google to book tickets, save your favorite venues, and host events instantly.</p>
+              <p className="text-gray-500 font-medium mb-6">Sign in to book tickets, save your favorite venues, and host events.</p>
               
+              <form onSubmit={handleEmailAuth} className="space-y-4 mb-6">
+                <div>
+                  <input type="email" required placeholder="Email Address" value={authEmail} onChange={e => setAuthEmail(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50" />
+                </div>
+                <div>
+                  <input type="password" required placeholder="Password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50" />
+                </div>
+                <button type="submit" className="w-full bg-[#4A3B32] text-white font-bold py-3 rounded-xl hover:bg-black transition-all shadow-md">
+                  {authMode === 'login' ? 'Log In' : 'Sign Up'}
+                </button>
+                <div className="text-center text-sm font-bold text-gray-500 mt-2">
+                  {authMode === 'login' ? "Don't have an account? " : "Already have an account? "}
+                  <button type="button" onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-[#D48847] hover:underline">
+                    {authMode === 'login' ? 'Sign Up' : 'Log In'}
+                  </button>
+                </div>
+              </form>
+
+              <div className="relative flex items-center justify-center mb-6">
+                <div className="border-t border-gray-200 w-full"></div>
+                <span className="bg-white px-4 text-xs font-bold text-gray-400 uppercase tracking-widest absolute">Or</span>
+              </div>
+
               <button onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 font-bold py-4 px-4 rounded-xl hover:bg-gray-50 transition-all shadow-sm text-lg">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6" />
                 Continue with Google
@@ -914,8 +976,8 @@ export default function FunfinityApp() {
               <button type="submit" className="w-full bg-[#4A3B32] text-white font-bold py-3 rounded-xl hover:bg-black transition-all shadow-md mt-4">
                 Proceed to Booking
               </button>
-              <button type="button" onClick={() => { setShowGuestModal(null); setShowAuthModal(true); }} className="w-full text-[#D48847] font-bold py-2 text-sm hover:underline">
-                Wait, I want to Login with Google instead
+              <button type="button" onClick={() => { setShowGuestModal(null); openAuthModal(); }} className="w-full text-[#D48847] font-bold py-2 text-sm hover:underline">
+                Wait, I want to Login instead
               </button>
             </form>
           </div>
@@ -951,7 +1013,7 @@ export default function FunfinityApp() {
         </div>
       )}
 
-      {/* Custom Confirmation Modal (replaces window.confirm) */}
+      {/* Custom Confirmation Modal */}
       {confirmModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl">
