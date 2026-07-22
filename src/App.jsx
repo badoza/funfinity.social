@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, arrayUnion } from 'firebase/firestore';
-import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, ShieldAlert, Camera, Star, MessageCircle, Navigation, Coffee, Sparkles, Youtube, Image as ImageIcon, Video, LogOut, Settings, LayoutDashboard } from 'lucide-react';
+import { getAuth, signInAnonymously, signInWithCustomToken, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, arrayUnion, setDoc, deleteDoc } from 'firebase/firestore';
+import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Flame, Music, Camera, Sun, Heart, Star, MessageCircle, Rocket, Smile, Info, Map, Navigation, Coffee, Sparkles, LogOut, Upload, Video, Image as ImageIcon, Trash2, Link as LinkIcon } from 'lucide-react';
 
-// Your EXACT Firebase Configuration
+// Your exact Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyBJQGM2mJpGkbJFTH9KiqAr3MQff9VJr_Y",
   authDomain: "funfinity-28521.firebaseapp.com",
@@ -18,130 +18,156 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
 
-// HARDCODED SUPER ADMINS
+// Critical environment variables for strict paths
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'funfinity-app-id';
+
+// Super Admin Configuration
 const SUPER_ADMINS = ['tilakdongare064@gmail.com', 'dodge.kunal@gmail.com'];
 
 export default function FunfinityApp() {
   const [user, setUser] = useState(null);
-  const [userRole, setUserRole] = useState('guest'); // 'guest', 'user', 'admin'
+  const [isAdmin, setIsAdmin] = useState(false);
+  
   const [events, setEvents] = useState([]);
   const [memories, setMemories] = useState([]);
-  const [currentView, setCurrentView] = useState('home'); // 'home', 'discover', 'venues', 'create', 'add-venue', 'admin'
+  const [globalSettings, setGlobalSettings] = useState(null);
+  
+  const [currentView, setCurrentView] = useState('home'); // 'home', 'discover', 'venues', 'create', 'admin'
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  
+  // Filters
   const [activeVibeFilter, setActiveVibeFilter] = useState('All');
   const [activeCityFilter, setActiveCityFilter] = useState('All India');
-  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   const cities = ['All India', 'Belagavi', 'Bengaluru', 'Mumbai', 'Goa', 'Delhi', 'Pune'];
   const vibes = ['All', 'Chill', 'High Energy', 'Deep Conversations', 'Creative'];
 
-  // Forms State
-  const [newEvent, setNewEvent] = useState({
-    title: '', date: '', time: '', venue: '', price: '', description: '', vibe: 'Chill', imageUrl: ''
-  });
-  
-  const [newMemory, setNewMemory] = useState({
-    title: '', url: '', type: 'image' // 'image' or 'youtube'
-  });
-
-  const panIndiaVenues = [
-    { id: 1, name: "La Casa Cafe", city: "Belagavi", type: "Cozy Cafe", capacity: "60+", image: "https://images.unsplash.com/photo-1554118811-1e0d58224f24?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", rating: 4.8 },
-    { id: 2, name: "The Bombay Canteen", city: "Mumbai", type: "Restaurant & Bar", capacity: "150+", image: "https://images.unsplash.com/photo-1514933651103-005eec06c04b?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", rating: 4.8 },
-    { id: 3, name: "Thalassa", city: "Goa", type: "Beachfront Lounge", capacity: "200+", image: "https://images.unsplash.com/photo-1515515535567-c205391e4db9?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", rating: 4.9 },
-  ];
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
+  };
 
   useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth error:", error);
+      }
+    };
+    initAuth();
+
     const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser && currentUser.email) {
-        if (SUPER_ADMINS.includes(currentUser.email)) {
-          setUserRole('admin');
-        } else {
-          setUserRole('user');
-        }
+        setIsAdmin(SUPER_ADMINS.includes(currentUser.email.toLowerCase()));
       } else {
-        setUserRole('guest');
+        setIsAdmin(false);
       }
     });
     return () => unsubscribeAuth();
   }, []);
 
-  useEffect(() => {
-    // Safely fetch Events
-    const eventsRef = collection(db, 'events');
-    const unsubscribeEvents = onSnapshot(eventsRef, (snapshot) => {
-      const eventsData = [];
-      snapshot.forEach((doc) => {
-        eventsData.push({ id: doc.id, ...doc.data() });
-      });
-      setEvents(eventsData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
-      setLoading(false);
-    }, (error) => {
-      console.error("Events fetch error:", error);
-      setLoading(false);
-    });
-
-    // Safely fetch Memories
-    const memoriesRef = collection(db, 'memories');
-    const unsubscribeMemories = onSnapshot(memoriesRef, (snapshot) => {
-      const memData = [];
-      snapshot.forEach((doc) => {
-        memData.push({ id: doc.id, ...doc.data() });
-      });
-      setMemories(memData.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
-    }, (error) => {
-      console.error("Memories fetch error:", error);
-    });
-
-    return () => {
-      unsubscribeEvents();
-      unsubscribeMemories();
-    };
-  }, []);
-
-  // Animation Observer for smooth scrolling reveals
-  useEffect(() => {
-    if (currentView === 'home') {
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('opacity-100', 'translate-y-0');
-            entry.target.classList.remove('opacity-0', 'translate-y-8');
-          }
-        });
-      }, { threshold: 0.1 });
-
-      const revealElements = document.querySelectorAll('.reveal');
-      revealElements.forEach((el) => observer.observe(el));
-
-      return () => revealElements.forEach((el) => observer.unobserve(el));
-    }
-  }, [currentView]);
-
   const handleGoogleLogin = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
-      setAuthModalOpen(false);
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      showToast("Successfully logged in!");
     } catch (error) {
-      console.error("Login failed:", error);
-      alert("Login failed or was cancelled.");
+      console.error("Login error:", error);
+      showToast(error.message, 'error');
     }
   };
 
   const handleLogout = async () => {
     await signOut(auth);
     setCurrentView('home');
+    showToast("Logged out successfully");
+    // Re-authenticate anonymously so the app doesn't break
+    signInAnonymously(auth);
   };
+
+  useEffect(() => {
+    if (!user) return;
+
+    // 1. Fetch Events
+    const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
+    const unsubscribeEvents = onSnapshot(eventsRef, (snapshot) => {
+      const eventsData = [];
+      snapshot.forEach((doc) => {
+        eventsData.push({ id: doc.id, ...doc.data() });
+      });
+      setEvents(eventsData.sort((a, b) => b.createdAt - a.createdAt));
+      setLoading(false);
+    }, (error) => console.error("Error fetching events:", error));
+
+    // 2. Fetch Memories
+    const memoriesRef = collection(db, 'artifacts', appId, 'public', 'data', 'memories');
+    const unsubscribeMemories = onSnapshot(memoriesRef, (snapshot) => {
+      const memData = [];
+      snapshot.forEach((doc) => memData.push({ id: doc.id, ...doc.data() }));
+      setMemories(memData.sort((a, b) => b.createdAt - a.createdAt));
+    }, (error) => console.error("Error fetching memories:", error));
+
+    // 3. Fetch Global Settings (Ads)
+    const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
+    const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setGlobalSettings(docSnap.data());
+      }
+    }, (error) => console.error("Error fetching settings:", error));
+
+    return () => {
+      unsubscribeEvents();
+      unsubscribeMemories();
+      unsubscribeSettings();
+    };
+  }, [user]);
+
+  // This genius function allows us to upload photos directly to the free database without Firebase Storage!
+  const compressImageToBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new window.Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800; // Compress width
+          const scaleSize = MAX_WIDTH / img.width;
+          canvas.width = MAX_WIDTH;
+          canvas.height = img.height * scaleSize;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          // 0.7 quality output reduces size drastically so it fits in Firestore
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(compressedBase64);
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const [newEvent, setNewEvent] = useState({
+    title: '', date: '', time: '', venue: '', price: '', description: '', vibe: 'Chill', imageUrl: ''
+  });
 
   const handleCreateEvent = async (e) => {
     e.preventDefault();
-    if (userRole !== 'admin') return; 
+    if (!user || !isAdmin) return;
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'events'), {
+      const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
+      await addDoc(eventsRef, {
         ...newEvent,
         imageUrl: newEvent.imageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
         hostId: user.uid,
@@ -149,49 +175,118 @@ export default function FunfinityApp() {
         attendees: [],
         createdAt: Date.now()
       });
+      showToast("Event published successfully!");
       setCurrentView('discover');
       setNewEvent({ title: '', date: '', time: '', venue: '', price: '', description: '', vibe: 'Chill', imageUrl: '' });
     } catch (error) {
       console.error("Error adding event: ", error);
-    }
-    setIsSubmitting(false);
-  };
-
-  const handleAddMemory = async (e) => {
-    e.preventDefault();
-    if (userRole !== 'admin') return;
-    setIsSubmitting(true);
-    try {
-      await addDoc(collection(db, 'memories'), {
-        ...newMemory,
-        addedBy: user.email,
-        createdAt: Date.now()
-      });
-      setNewMemory({ title: '', url: '', type: 'image' });
-      alert("Memory successfully added to the Homepage!");
-    } catch (error) {
-      console.error("Error adding memory: ", error);
+      showToast("Failed to create event.", 'error');
     }
     setIsSubmitting(false);
   };
 
   const handleRSVP = async (eventId) => {
-    if (!user) {
-      setAuthModalOpen(true);
-      return;
+    if (!user || user.isAnonymous) {
+        showToast("Please log in with Google to RSVP!", "error");
+        return;
     }
     try {
-      const eventRef = doc(db, 'events', eventId);
+      const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
       await updateDoc(eventRef, { attendees: arrayUnion(user.uid) });
+      showToast("You are on the list! See you there.");
     } catch (error) {
       console.error("Error RSVPing: ", error);
     }
   };
 
-  const getYouTubeId = (url) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
+  const [memoryType, setMemoryType] = useState('photo'); // 'photo' or 'video'
+  const [videoUrl, setVideoUrl] = useState('');
+  
+  const handleMemoryUpload = async (e) => {
+    if (!isAdmin) return;
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    setIsSubmitting(true);
+    try {
+      showToast("Compressing and uploading image...", "success");
+      const base64Image = await compressImageToBase64(file);
+      
+      const memoriesRef = collection(db, 'artifacts', appId, 'public', 'data', 'memories');
+      await addDoc(memoriesRef, {
+        type: 'photo',
+        url: base64Image,
+        createdAt: Date.now()
+      });
+      showToast("Photo added to Memory Wall!");
+    } catch (error) {
+      console.error(error);
+      showToast("Upload failed.", "error");
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleVideoSubmit = async (e) => {
+    e.preventDefault();
+    if (!isAdmin || !videoUrl) return;
+    setIsSubmitting(true);
+    try {
+      const memoriesRef = collection(db, 'artifacts', appId, 'public', 'data', 'memories');
+      await addDoc(memoriesRef, {
+        type: 'video',
+        url: videoUrl,
+        createdAt: Date.now()
+      });
+      showToast("Video link added to Memory Wall!");
+      setVideoUrl('');
+    } catch (error) {
+      console.error(error);
+      showToast("Failed to add video.", "error");
+    }
+    setIsSubmitting(false);
+  };
+
+  const deleteMemory = async (id) => {
+    if (!isAdmin) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'memories', id));
+      showToast("Memory deleted.");
+    } catch (error) {
+        console.error(error);
+    }
+  };
+
+  const [adData, setAdData] = useState({ link: '' });
+  const handleAdUpload = async (e) => {
+    if (!isAdmin) return;
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    setIsSubmitting(true);
+    try {
+      showToast("Uploading Ad Banner...", "success");
+      const base64Image = await compressImageToBase64(file);
+      
+      const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
+      await setDoc(settingsRef, {
+        adBanner: {
+            imageUrl: base64Image,
+            link: adData.link
+        }
+      }, { merge: true });
+      showToast("Ad Banner updated successfully!");
+    } catch (error) {
+      console.error(error);
+      showToast("Upload failed.", "error");
+    }
+    setIsSubmitting(false);
+  };
+
+  const clearAdBanner = async () => {
+      if(!isAdmin) return;
+      const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'global');
+      await setDoc(settingsRef, { adBanner: null }, { merge: true });
+      showToast("Ad Banner removed.");
   };
 
   const Logo = ({ size = 45 }) => (
@@ -203,320 +298,283 @@ export default function FunfinityApp() {
     </svg>
   );
 
-  const renderAdminDashboard = () => {
-    if (userRole !== 'admin') {
-      return (
-        <div className="py-24 text-center">
-          <ShieldAlert className="mx-auto h-16 w-16 text-red-500 mb-4" />
-          <h2 className="text-2xl font-bold">Access Denied</h2>
-          <p className="text-gray-500">You must be a Super Admin to view this page.</p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="max-w-4xl mx-auto w-full px-4 mt-8 pb-24 animate-in fade-in">
-        <div className="bg-[#4A3B32] rounded-3xl p-8 text-white mb-8 shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 opacity-10">
-            <LayoutDashboard size={120} />
-          </div>
-          <h1 className="text-3xl font-bold mb-2 relative z-10">Super Admin Command Center</h1>
-          <p className="text-[#F3E8D8] relative z-10 flex items-center gap-2">
-            <ShieldCheck size={18} className="text-green-400"/> Welcome, {user.email}
-          </p>
-        </div>
-
-        <div className="bg-white rounded-3xl p-8 border border-[#F3E8D8] shadow-sm mb-8">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 bg-[#D48847]/10 text-[#D48847] rounded-full flex items-center justify-center">
-              <Camera size={20} />
-            </div>
-            <h2 className="text-2xl font-bold text-[#4A3B32]">Post to Memory Wall</h2>
-          </div>
-          <p className="text-gray-500 mb-6 text-sm">Add a YouTube video link or an Image URL. This will instantly appear on the public Homepage.</p>
-          
-          <form onSubmit={handleAddMemory} className="space-y-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-bold text-[#4A3B32] mb-1">Memory Title</label>
-                <input required type="text" placeholder="e.g., Epic Weekend at La Casa" value={newMemory.title} onChange={e => setNewMemory({...newMemory, title: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white transition-all" />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-[#4A3B32] mb-1">Media Type</label>
-                <select value={newMemory.type} onChange={e => setNewMemory({...newMemory, type: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white transition-all">
-                  <option value="image">Image / Photo (Direct Link)</option>
-                  <option value="youtube">YouTube Video</option>
-                </select>
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-bold text-[#4A3B32] mb-1">Media URL</label>
-              <input required type="url" placeholder={newMemory.type === 'youtube' ? "https://youtube.com/watch?v=..." : "https://imgur.com/... / https://...jpg"} value={newMemory.url} onChange={e => setNewMemory({...newMemory, url: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white transition-all" />
-            </div>
-
-            <button type="submit" disabled={isSubmitting} className="w-full bg-[#D48847] text-white py-4 rounded-xl font-bold hover:bg-[#4A3B32] transition-colors disabled:opacity-50 shadow-md flex items-center justify-center gap-2 mt-4">
-              <Sparkles size={20} /> {isSubmitting ? 'Publishing...' : 'Publish to Homepage'}
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  };
-
-  const renderCreateEvent = () => {
-    // LOCKDOWN: Only Admins can see the creation form.
-    if (userRole !== 'admin') {
-      return (
-        <div className="py-32 text-center max-w-lg mx-auto px-4 animate-in fade-in slide-in-from-bottom-4">
-          <div className="w-24 h-24 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner border border-orange-100">
-             <ShieldAlert size={48} className="text-orange-500" />
-          </div>
-          <h2 className="text-3xl font-bold text-[#4A3B32] mb-4">Verification Required</h2>
-          <p className="text-gray-500 mb-8 font-medium">To maintain the highest quality and safety for the Funfinity community, all hosts must be manually verified. Please contact the Funfinity team to get your creator account approved!</p>
-          <a href="mailto:tilakdongare064@gmail.com" className="bg-[#4A3B32] text-white px-8 py-4 rounded-full font-bold shadow-lg hover:bg-black transition-all inline-flex items-center justify-center gap-2 hover:-translate-y-1">
-            <MessageCircle size={20} /> Contact Admin
-          </a>
-        </div>
-      );
-    }
-
-    return (
-      <div className="max-w-2xl mx-auto w-full bg-white p-6 md:p-10 rounded-[2.5rem] shadow-xl border border-[#F3E8D8] animate-in slide-in-from-bottom-8 duration-500 pb-24 md:pb-10 mt-8">
-        <div className="mb-8 text-center">
-          <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-100">
-            <ShieldCheck size={32} />
-          </div>
-          <h2 className="text-3xl font-bold text-[#4A3B32] mb-2">Host an Event</h2>
-          <p className="text-gray-500 text-sm font-medium">You are verified as an Admin. Events created here will be instantly published.</p>
-        </div>
-        
-        <form onSubmit={handleCreateEvent} className="space-y-5">
-          <div>
-            <label className="block text-sm font-bold text-[#4A3B32] mb-1">Event Title</label>
-            <input required type="text" placeholder="e.g., Acoustic Campfire Jam" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none transition-shadow bg-gray-50 focus:bg-white" />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-[#4A3B32] mb-1">Date</label>
-              <input required type="date" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-[#4A3B32] mb-1">Time</label>
-              <input required type="time" value={newEvent.time} onChange={e => setNewEvent({...newEvent, time: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-[#4A3B32] mb-1">Venue Name</label>
-              <input required type="text" placeholder="e.g., La Casa Cafe" value={newEvent.venue} onChange={e => setNewEvent({...newEvent, venue: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-[#4A3B32] mb-1">Price (₹)</label>
-              <input type="number" placeholder="Leave empty if Free" value={newEvent.price} onChange={e => setNewEvent({...newEvent, price: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-             <div>
-                <label className="block text-sm font-bold text-[#4A3B32] mb-1">Vibe</label>
-                <select value={newEvent.vibe} onChange={e => setNewEvent({...newEvent, vibe: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white">
-                  {vibes.filter(v => v !== 'All').map(v => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
-                </select>
-             </div>
-             <div>
-                <label className="block text-sm font-bold text-[#4A3B32] mb-1">Cover Image URL</label>
-                <input type="url" placeholder="https://..." value={newEvent.imageUrl} onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
-             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-bold text-[#4A3B32] mb-1">Description</label>
-            <textarea required rows="3" placeholder="What is this event about?" value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none transition-shadow bg-gray-50 focus:bg-white"></textarea>
-          </div>
-
-          <button type="submit" disabled={isSubmitting} className="w-full bg-[#4A3B32] text-white py-4 rounded-xl font-bold hover:bg-black transition-colors disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
-            <PlusCircle size={20} /> {isSubmitting ? 'Publishing...' : 'Publish Event Live'}
-          </button>
-        </form>
-      </div>
-    );
-  };
-
   const renderHome = () => (
     <div className="w-full bg-[#FDFBF7]">
       {/* Hero Section */}
-      <section 
-        className="min-h-[90vh] flex items-center pt-20 relative bg-cover bg-center bg-fixed border-b border-[#D48847]/20"
-        style={{ backgroundImage: "linear-gradient(rgba(74, 59, 50, 0.75), rgba(212, 136, 71, 0.65)), url('https://images.unsplash.com/photo-1543807535-eceef0bc6599?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80')" }}
-      >
+      <section className="min-h-screen flex items-center pt-20 relative bg-cover bg-center bg-fixed" style={{ backgroundImage: "linear-gradient(rgba(74, 59, 50, 0.75), rgba(212, 136, 71, 0.65)), url('https://images.unsplash.com/photo-1543807535-eceef0bc6599?ixlib=rb-4.0.3&auto=format&fit=crop&w=1920&q=80')" }}>
         <div className="px-4 max-w-7xl mx-auto w-full grid md:grid-cols-2 gap-12 items-center z-10">
           <div className="text-left">
-            <div className="reveal opacity-0 translate-y-8 transition-all duration-700 inline-block bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-1 mb-6 shadow-sm">
+            <div className="inline-block bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-1 mb-6 shadow-sm">
               <span className="text-white text-sm font-semibold flex items-center gap-2">
                 <MapPin size={14} className="text-[#D48847]" /> Belagavi's Premium Social Platform
               </span>
             </div>
-            <h1 className="reveal opacity-0 translate-y-8 transition-all duration-700 delay-100 text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
+            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
               Find Your Vibe.<br/><span className="text-[#D48847] drop-shadow-md">Find Your People.</span>
             </h1>
-            <p className="reveal opacity-0 translate-y-8 transition-all duration-700 delay-200 text-xl text-white/90 mb-8 font-medium max-w-lg">
-              Discover local events, check out venue menus, book tickets, or host your own verified experiences. All in one app.
+            <p className="text-xl text-white/90 mb-8 font-medium max-w-lg">
+              Discover local events, book tickets, or host your own verified experiences. All in one app.
             </p>
             
-            <div className="reveal opacity-0 translate-y-8 transition-all duration-700 delay-200 flex flex-wrap gap-4">
-              <button onClick={() => setCurrentView('discover')} className="bg-[#D48847] text-white px-8 py-4 rounded-full font-bold hover:bg-[#4A3B32] transition-colors shadow-lg flex items-center gap-2 text-lg hover:-translate-y-1">
-                <Search size={20} /> Discover Events
+            <div className="flex flex-wrap gap-4">
+              <button onClick={() => setCurrentView('discover')} className="bg-[#D48847] text-white px-8 py-3 rounded-full font-bold hover:bg-[#4A3B32] transition-colors shadow-lg flex items-center gap-2">
+                <Search size={18} /> Discover Events
               </button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* NEW: The Memory Wall Section */}
-      {memories.length > 0 && (
-        <section className="py-24 bg-white px-4 border-b border-[#F3E8D8]">
+      {/* Ad Banner Section (Controlled by Admin) */}
+      {globalSettings?.adBanner?.imageUrl && (
+        <section className="py-12 bg-[#FDFBF7] px-4">
           <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-12 reveal opacity-0 translate-y-8 transition-all duration-700">
-              <div>
-                <div className="flex items-center gap-2 text-[#D48847] font-bold mb-2">
-                  <Camera size={24} /> MEMORY WALL
-                </div>
-                <h2 className="text-4xl font-bold text-[#4A3B32]">Moments to Remember</h2>
-                <p className="text-[#4A3B32]/70 mt-2">Highlights from recent Funfinity experiences.</p>
+            <div className="text-xs text-gray-400 font-bold mb-2 uppercase tracking-widest text-center">Featured Advertisement</div>
+            <a href={globalSettings.adBanner.link || '#'} target="_blank" rel="noopener noreferrer" className="block relative w-full h-48 md:h-72 rounded-[2rem] overflow-hidden shadow-2xl group border-4 border-white cursor-pointer">
+              <img src={globalSettings.adBanner.imageUrl} alt="Advertisement" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+              <div className="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-[#4A3B32] shadow-lg flex items-center gap-1">
+                Sponsored <Star size={12} className="text-[#D48847]" />
               </div>
-            </div>
-
-            <div className="columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6">
-              {memories.map((memory) => (
-                <div key={memory.id} className="break-inside-avoid bg-[#FDFBF7] rounded-[2rem] overflow-hidden shadow-md border border-[#F3E8D8] group hover:shadow-xl transition-all duration-500">
-                  {memory.type === 'youtube' && getYouTubeId(memory.url) ? (
-                    <div className="relative pt-[56.25%] w-full">
-                      <iframe 
-                        src={`https://www.youtube.com/embed/${getYouTubeId(memory.url)}`} 
-                        title={memory.title}
-                        className="absolute top-0 left-0 w-full h-full border-0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                        allowFullScreen
-                      ></iframe>
-                    </div>
-                  ) : (
-                    <div className="relative overflow-hidden group">
-                      <img src={memory.url} alt={memory.title} className="w-full h-auto object-cover transform group-hover:scale-105 transition-transform duration-700" loading="lazy" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                    </div>
-                  )}
-                  <div className="p-5">
-                    <h3 className="font-bold text-[#4A3B32] text-lg leading-tight flex items-start gap-2">
-                      {memory.type === 'youtube' ? <Youtube className="text-red-500 shrink-0 mt-0.5" size={18}/> : <ImageIcon className="text-[#D48847] shrink-0 mt-0.5" size={18}/>}
-                      {memory.title}
-                    </h3>
-                  </div>
-                </div>
-              ))}
-            </div>
+            </a>
           </div>
         </section>
       )}
 
-      {/* Trending Events Section */}
-      <section className="py-24 bg-[#FDFBF7] px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-end mb-12 reveal opacity-0 translate-y-8 transition-all duration-700">
-            <div>
-              <h2 className="text-4xl font-bold text-[#4A3B32] mb-2">Trending in Belagavi</h2>
-              <p className="text-[#4A3B32]/70">Discover experiences hosted by verified creators.</p>
-            </div>
-            <button onClick={() => setCurrentView('discover')} className="hidden sm:flex text-[#D48847] font-bold hover:underline items-center gap-1">
-              View All Events <Sparkles size={16} />
-            </button>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {events.slice(0, 3).map((event, index) => (
-              <div key={event.id} className={`reveal opacity-0 translate-y-8 transition-all duration-700 delay-${index * 100} bg-white rounded-2xl overflow-hidden shadow-lg border border-[#F3E8D8] cursor-pointer group flex flex-col h-full`} onClick={() => setCurrentView('discover')}>
-                <div className="relative overflow-hidden h-56 shrink-0">
-                  <img src={event.imageUrl} alt={event.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                  <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-sm font-bold shadow-sm flex items-center text-[#4A3B32]">
-                    <Sparkles size={14} className="text-[#D48847] mr-1" /> Trending
-                  </div>
-                </div>
-                <div className="p-6 flex flex-col flex-grow">
-                  <div className="flex items-center gap-2 text-sm font-bold text-[#D48847] mb-2 uppercase tracking-wide">
-                    <Calendar size={14} /> {event.date} • {event.time}
-                  </div>
-                  <h3 className="text-xl font-bold mb-2 group-hover:text-[#D48847] transition-colors text-[#4A3B32]">{event.title}</h3>
-                  <div className="flex items-center gap-2 text-sm text-[#4A3B32]/70 mb-4 font-medium">
-                    <MapPin size={14} /> {event.venue}
+      {/* Memory Wall Section */}
+      {memories.length > 0 && (
+          <section className="py-16 bg-white border-y border-[#F3E8D8] px-4">
+              <div className="max-w-7xl mx-auto">
+                  <div className="flex flex-col items-center text-center mb-10">
+                      <div className="w-16 h-16 bg-[#F3E8D8] rounded-full flex items-center justify-center mb-4">
+                          <Camera className="text-[#D48847]" size={32} />
+                      </div>
+                      <h2 className="text-4xl font-bold text-[#4A3B32]">Funfinity Memory Wall</h2>
+                      <p className="text-[#4A3B32]/70 mt-2">Moments captured from our recent experiences.</p>
                   </div>
                   
-                  <div className="mt-auto pt-4 border-t border-gray-100 flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-[#4A3B32] text-white flex items-center justify-center text-xs font-bold shadow-sm">
-                        <ShieldCheck size={14} />
-                      </div>
-                      <div className="text-xs">
-                        <div className="text-gray-500">Hosted by</div>
-                        <div className="font-bold text-[#4A3B32]">Verified Admin</div>
-                      </div>
-                    </div>
-                    <button className="bg-[#F3E8D8] text-[#4A3B32] px-4 py-2 rounded-lg font-bold text-sm">
-                      {event.price && event.price !== "0" ? `₹${event.price}` : 'Free'}
-                    </button>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {memories.map((mem) => (
+                          <div key={mem.id} className="relative rounded-2xl overflow-hidden aspect-square shadow-sm hover:shadow-xl transition-all group">
+                              {mem.type === 'photo' ? (
+                                  <img src={mem.url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="Memory" />
+                              ) : (
+                                  <div className="w-full h-full bg-black flex items-center justify-center relative">
+                                      <img src={`https://img.youtube.com/vi/${mem.url.split('v=')[1]?.split('&')[0] || mem.url.split('/').pop()}/0.jpg`} className="w-full h-full object-cover opacity-60 group-hover:scale-110 transition-transform duration-500" alt="Video thumbnail" />
+                                      <div className="absolute inset-0 flex items-center justify-center">
+                                          <div className="w-12 h-12 bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center">
+                                            <Video className="text-white" size={24} />
+                                          </div>
+                                      </div>
+                                  </div>
+                              )}
+                              <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Heart className="text-white fill-white shadow-lg" size={20} />
+                              </div>
+                          </div>
+                      ))}
                   </div>
-                </div>
               </div>
-            ))}
-            
-            {events.length === 0 && (
-              <div className="col-span-3 text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
-                <Calendar className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-                <h3 className="text-xl font-bold text-[#4A3B32]">No upcoming events</h3>
-                <p className="text-gray-500 mt-2">Check back later for new experiences.</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
+          </section>
+      )}
+
     </div>
   );
 
-  return (
-    <div className="min-h-screen bg-[#FDFBF7] font-sans selection:bg-[#D48847] selection:text-white flex flex-col items-center">
-      
-      {/* Auth Modal */}
-      {authModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl relative animate-in zoom-in-95 duration-300">
-            <button onClick={() => setAuthModalOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-800">
-              ✕
-            </button>
-            <div className="text-center mb-6">
-              <Logo size={60} />
-              <h3 className="text-2xl font-bold text-[#4A3B32] mt-4">Welcome to Funfinity</h3>
-              <p className="text-gray-500 text-sm mt-2">Sign in to book tickets, save events, and access creator features.</p>
+  const renderCreateEvent = () => {
+    // SECURITY LOCK: Only Super Admins can see this page
+    if (!isAdmin) {
+        return (
+            <div className="min-h-screen flex items-center justify-center p-4 w-full">
+                <div className="bg-white p-10 rounded-[3rem] shadow-2xl text-center max-w-lg border border-[#F3E8D8]">
+                    <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <ShieldCheck className="text-red-500" size={48} />
+                    </div>
+                    <h2 className="text-3xl font-bold text-[#4A3B32] mb-4">Verification Required</h2>
+                    <p className="text-gray-500 mb-8 leading-relaxed">
+                        To maintain a safe and premium community, only Verified Hosts can create events on Funfinity. 
+                        Interested in hosting an amazing experience?
+                    </p>
+                    <a href="mailto:tilakdongare064@gmail.com" className="inline-flex items-center gap-2 bg-[#4A3B32] text-white px-8 py-4 rounded-full font-bold hover:bg-black transition-all shadow-lg hover:-translate-y-1">
+                        <MessageCircle size={20} /> Apply to become a Host
+                    </a>
+                </div>
             </div>
-            
-            <button onClick={handleGoogleLogin} className="w-full bg-white border-2 border-gray-200 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-50 hover:border-gray-300 transition-all flex items-center justify-center gap-3 shadow-sm mb-4">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M22.56 12.25C22.56 11.47 22.49 10.72 22.36 10H12V14.26H17.92C17.67 15.63 16.89 16.81 15.73 17.58V20.35H19.3C21.38 18.43 22.56 15.6 22.56 12.25Z" fill="#4285F4"/>
-                <path d="M12 23C14.97 23 17.46 22.02 19.3 20.35L15.73 17.58C14.73 18.25 13.48 18.66 12 18.66C9.13 18.66 6.71 16.73 5.84 14.13H2.15V16.99C4.05 20.76 7.82 23 12 23Z" fill="#34A853"/>
-                <path d="M5.84 14.13C5.62 13.47 5.49 12.75 5.49 12C5.49 11.25 5.62 10.53 5.84 9.87V7.01H2.15C1.37 8.56 0.92 10.23 0.92 12C0.92 13.77 1.37 15.44 2.15 16.99L5.84 14.13Z" fill="#FBBC05"/>
-                <path d="M12 5.34C13.62 5.34 15.06 5.9 16.2 6.99L19.38 3.81C17.45 2.01 14.96 0.92 12 0.92C7.82 0.92 4.05 3.24 2.15 7.01L5.84 9.87C6.71 7.27 9.13 5.34 12 5.34Z" fill="#EA4335"/>
-              </svg>
-              Continue with Google
-            </button>
-            <p className="text-center text-xs text-gray-400 mt-4">By continuing, you agree to Funfinity's Terms of Service.</p>
-          </div>
-        </div>
-      )}
+        );
+    }
 
-      {/* Top Navigation */}
-      <nav className="bg-[#FDFBF7]/90 backdrop-blur-md sticky top-0 z-50 border-b border-[#F3E8D8] transition-all w-full">
+    // Actual Create Event Form for Admins
+    return (
+        <div className="max-w-2xl mx-auto w-full bg-white p-6 md:p-10 rounded-[2.5rem] shadow-xl border border-[#F3E8D8] mt-8 mb-20">
+            <div className="mb-8 text-center">
+                <div className="w-16 h-16 bg-[#F3E8D8] rounded-full flex items-center justify-center mx-auto mb-4">
+                <Star className="text-[#D48847]" size={32} />
+                </div>
+                <h2 className="text-3xl font-bold text-[#4A3B32] mb-2">Host an Event</h2>
+                <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold mt-2">
+                    <ShieldCheck size={14} /> Admin Privileges Verified
+                </div>
+            </div>
+            <form onSubmit={handleCreateEvent} className="space-y-5">
+                <div>
+                    <label className="block text-sm font-bold text-[#4A3B32] mb-1">Event Title</label>
+                    <input required type="text" placeholder="e.g., Acoustic Campfire Jam" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-bold text-[#4A3B32] mb-1">Date</label>
+                        <input required type="date" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-[#4A3B32] mb-1">Time</label>
+                        <input required type="time" value={newEvent.time} onChange={e => setNewEvent({...newEvent, time: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-bold text-[#4A3B32] mb-1">Venue</label>
+                        <input required type="text" placeholder="e.g., La Casa Cafe" value={newEvent.venue} onChange={e => setNewEvent({...newEvent, venue: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-bold text-[#4A3B32] mb-1">Price (₹)</label>
+                        <input type="number" placeholder="Leave empty if Free" value={newEvent.price} onChange={e => setNewEvent({...newEvent, price: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
+                    </div>
+                </div>
+
+                <div>
+                    <label className="block text-sm font-bold text-[#4A3B32] mb-1">Cover Image URL</label>
+                    <input type="url" placeholder="https://..." value={newEvent.imageUrl} onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white" />
+                </div>
+
+                <div>
+                    <label className="block text-sm font-bold text-[#4A3B32] mb-1">Description</label>
+                    <textarea required rows="3" placeholder="What is this event about?" value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white"></textarea>
+                </div>
+
+                <button type="submit" disabled={isSubmitting} className="w-full bg-[#D48847] text-white py-4 rounded-xl font-bold hover:bg-[#b87439] transition-colors disabled:opacity-50 shadow-lg flex items-center justify-center gap-2">
+                    <PlusCircle size={20} /> {isSubmitting ? 'Publishing...' : 'Publish Event'}
+                </button>
+            </form>
+        </div>
+    );
+  };
+
+  const renderAdminDashboard = () => {
+    if (!isAdmin) return null;
+
+    return (
+        <div className="max-w-5xl mx-auto w-full px-4 mt-8 pb-24">
+            <div className="mb-8">
+                <h2 className="text-4xl font-bold text-[#4A3B32] mb-2 flex items-center gap-3">
+                    <ShieldCheck className="text-purple-600" size={40} /> Admin Command Center
+                </h2>
+                <p className="text-gray-500 font-medium">Welcome back, Super Admin. Manage your platform here.</p>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-8">
+                {/* Memory Wall Uploader */}
+                <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-[#F3E8D8]">
+                    <div className="flex items-center gap-3 mb-6 border-b border-gray-100 pb-4">
+                        <Camera className="text-[#D48847]" size={28} />
+                        <h3 className="text-2xl font-bold text-[#4A3B32]">Add to Memory Wall</h3>
+                    </div>
+                    
+                    <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
+                        <button onClick={() => setMemoryType('photo')} className={`flex-1 py-2 font-bold text-sm rounded-lg flex items-center justify-center gap-2 transition-colors ${memoryType === 'photo' ? 'bg-white shadow text-[#D48847]' : 'text-gray-500'}`}>
+                            <ImageIcon size={16} /> Upload Photo
+                        </button>
+                        <button onClick={() => setMemoryType('video')} className={`flex-1 py-2 font-bold text-sm rounded-lg flex items-center justify-center gap-2 transition-colors ${memoryType === 'video' ? 'bg-white shadow text-[#D48847]' : 'text-gray-500'}`}>
+                            <Video size={16} /> Link Video
+                        </button>
+                    </div>
+
+                    {memoryType === 'photo' ? (
+                        <div className="space-y-4">
+                            <div className="border-2 border-dashed border-gray-300 rounded-2xl p-8 text-center hover:bg-gray-50 transition-colors">
+                                <Upload className="mx-auto text-gray-400 mb-2" size={32} />
+                                <p className="text-sm text-gray-500 mb-4">Select an image from your computer or phone.<br/>It will be compressed automatically to save space!</p>
+                                <label className="cursor-pointer bg-[#4A3B32] hover:bg-black text-white px-6 py-3 rounded-full font-bold transition-colors inline-block">
+                                    Browse Files
+                                    <input type="file" accept="image/*" className="hidden" onChange={handleMemoryUpload} disabled={isSubmitting} />
+                                </label>
+                            </div>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleVideoSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-1">YouTube Video Link</label>
+                                <input required type="url" placeholder="https://www.youtube.com/watch?v=..." value={videoUrl} onChange={e => setVideoUrl(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-[#D48847]" />
+                            </div>
+                            <button type="submit" disabled={isSubmitting} className="w-full bg-[#D48847] text-white py-3 rounded-xl font-bold hover:bg-[#b87439] transition-colors shadow-md">
+                                {isSubmitting ? 'Adding...' : 'Add Video to Wall'}
+                            </button>
+                        </form>
+                    )}
+
+                    {/* Manage Existing Memories */}
+                    <div className="mt-8">
+                        <h4 className="font-bold text-sm text-gray-400 uppercase tracking-wider mb-4">Manage Recent Memories</h4>
+                        <div className="flex overflow-x-auto gap-3 pb-2">
+                            {memories.map(mem => (
+                                <div key={mem.id} className="relative w-24 h-24 rounded-lg overflow-hidden shrink-0 group shadow-sm border border-gray-200">
+                                    <img src={mem.type === 'photo' ? mem.url : `https://img.youtube.com/vi/${mem.url.split('v=')[1]?.split('&')[0] || mem.url.split('/').pop()}/default.jpg`} className="w-full h-full object-cover" />
+                                    <button onClick={() => deleteMemory(mem.id)} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Trash2 className="text-red-400 hover:text-red-500" size={24} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Advertisement Uploader */}
+                <div className="bg-white p-8 rounded-[2rem] shadow-xl border border-[#F3E8D8]">
+                    <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-4">
+                        <div className="flex items-center gap-3">
+                            <Star className="text-yellow-500 fill-yellow-500" size={28} />
+                            <h3 className="text-2xl font-bold text-[#4A3B32]">Homepage Ad Banner</h3>
+                        </div>
+                        {globalSettings?.adBanner && (
+                            <button onClick={clearAdBanner} className="text-xs text-red-500 font-bold hover:underline">Remove Current Ad</button>
+                        )}
+                    </div>
+                    
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1 flex items-center gap-2">
+                                <LinkIcon size={14} /> Where should this Ad link to? (Optional)
+                            </label>
+                            <input type="url" placeholder="https://..." value={adData.link} onChange={e => setAdData({...adData, link: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:ring-2 focus:ring-yellow-400 mb-4" />
+                        </div>
+
+                        <div className="border-2 border-dashed border-yellow-300 bg-yellow-50 rounded-2xl p-6 text-center hover:bg-yellow-100 transition-colors">
+                            <Upload className="mx-auto text-yellow-500 mb-2" size={32} />
+                            <p className="text-sm text-yellow-700 font-medium mb-4">Upload a wide Banner Image (16:9 recommended).</p>
+                            <label className="cursor-pointer bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-3 rounded-full font-bold transition-colors inline-block shadow-md">
+                                Upload Ad Image
+                                <input type="file" accept="image/*" className="hidden" onChange={handleAdUpload} disabled={isSubmitting} />
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FDFBF7] font-sans selection:bg-[#D48847] selection:text-white flex flex-col items-center relative">
+      
+      {/* Premium Toast Notification */}
+      <div className={`fixed top-24 right-4 z-50 transition-all duration-300 transform ${toast.show ? 'translate-x-0 opacity-100' : 'translate-x-10 opacity-0 pointer-events-none'}`}>
+          <div className={`px-6 py-3 rounded-xl shadow-2xl font-bold flex items-center gap-3 ${toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-[#4A3B32] text-white'}`}>
+              {toast.type === 'error' ? <Info size={20} /> : <ShieldCheck size={20} className="text-green-400" />}
+              {toast.message}
+          </div>
+      </div>
+
+      <nav className="bg-[#FDFBF7]/90 backdrop-blur-md sticky top-0 z-40 border-b border-[#F3E8D8] transition-all w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setCurrentView('home')}>
@@ -524,96 +582,60 @@ export default function FunfinityApp() {
               <span className="font-bold text-2xl text-[#4A3B32] tracking-tight group-hover:text-[#D48847] transition-colors">Funfinity</span>
             </div>
             
-            <div className="hidden md:flex items-center gap-6 bg-white px-6 py-2 rounded-full shadow-sm border border-gray-100">
-              <button onClick={() => setCurrentView('home')} className={`font-bold text-sm transition-colors ${currentView === 'home' ? 'text-[#D48847]' : 'text-[#4A3B32] hover:text-[#D48847]'}`}>Home</button>
-              <button onClick={() => setCurrentView('discover')} className={`font-bold text-sm transition-colors ${currentView === 'discover' ? 'text-[#D48847]' : 'text-[#4A3B32] hover:text-[#D48847]'}`}>Events</button>
-              <button onClick={() => setCurrentView('create')} className={`font-bold text-sm transition-colors ${currentView === 'create' ? 'text-[#D48847]' : 'text-[#4A3B32] hover:text-[#D48847]'}`}>Host</button>
+            <div className="hidden md:flex items-center gap-8 bg-white px-6 py-2 rounded-full shadow-sm border border-gray-100">
+              <button onClick={() => setCurrentView('home')} className={`font-bold text-sm transition-colors ${currentView === 'home' ? 'text-[#D48847]' : 'text-[#4A3B32] hover:text-[#D48847]'}`}>Story</button>
               
-              {/* ADMIN ONLY TAB */}
-              {userRole === 'admin' && (
-                <button onClick={() => setCurrentView('admin')} className={`flex items-center gap-1 font-bold text-sm px-3 py-1 rounded-full transition-colors ${currentView === 'admin' ? 'bg-[#4A3B32] text-white' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}>
-                  <ShieldCheck size={14} /> Admin Zone
-                </button>
+              {/* Conditional Admin Button */}
+              {isAdmin && (
+                  <button onClick={() => setCurrentView('admin')} className={`font-bold text-sm flex items-center gap-1 transition-colors ${currentView === 'admin' ? 'text-purple-600' : 'text-purple-400 hover:text-purple-600'}`}>
+                      <ShieldCheck size={16} /> Admin Zone
+                  </button>
               )}
             </div>
 
             <div className="flex items-center gap-3">
-              {user ? (
-                <div className="flex items-center gap-3">
-                  <div className="hidden sm:block text-right">
-                    <div className="text-xs font-bold text-[#4A3B32]">{user.displayName || 'User'}</div>
-                    <div className="text-[10px] text-gray-500">{userRole === 'admin' ? 'Super Admin' : 'Member'}</div>
+              {user && !user.isAnonymous ? (
+                  <div className="flex items-center gap-4">
+                    <div className="hidden sm:flex flex-col text-right">
+                        <span className="text-xs font-bold text-[#4A3B32]">{user.email?.split('@')[0]}</span>
+                        {isAdmin && <span className="text-[10px] text-purple-600 font-bold uppercase">Super Admin</span>}
+                    </div>
+                    <button onClick={handleLogout} className="bg-gray-100 hover:bg-gray-200 text-gray-600 w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-inner" title="Log Out">
+                        <LogOut size={16} />
+                    </button>
                   </div>
-                  <button onClick={handleLogout} className="bg-red-50 text-red-500 p-2 rounded-full hover:bg-red-100 transition-colors" title="Log Out">
-                    <LogOut size={18} />
-                  </button>
-                </div>
               ) : (
-                <button onClick={() => setAuthModalOpen(true)} className="bg-[#4A3B32] text-white px-6 py-2 rounded-full font-bold text-sm shadow-md hover:bg-black transition-colors">
-                  Sign In
-                </button>
+                  <button onClick={handleGoogleLogin} className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-5 py-2 rounded-full font-bold text-sm hover:bg-gray-50 transition-colors shadow-sm">
+                      <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)"><path fill="#4285F4" d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"/><path fill="#34A853" d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"/><path fill="#FBBC05" d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"/><path fill="#EA4335" d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"/></g></svg>
+                      Login
+                  </button>
               )}
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Main Content Area */}
-      <main className="flex-grow w-full flex flex-col items-center min-h-[70vh]">
+      <main className="flex-grow w-full flex flex-col items-center">
         {currentView === 'home' && renderHome()}
-        
-        {/* Placeholder for Discover/Events View - keeping it minimal to focus on the fix */}
-        {currentView === 'discover' && (
-          <div className="py-24 text-center max-w-4xl mx-auto w-full px-4 animate-in fade-in">
-             <h2 className="text-4xl font-bold text-[#4A3B32] mb-8">All Events</h2>
-             <div className="grid md:grid-cols-2 gap-6">
-               {events.map((event) => (
-                 <div key={event.id} className="bg-white rounded-2xl p-6 text-left shadow-sm border border-[#F3E8D8]">
-                   <h3 className="text-2xl font-bold text-[#4A3B32]">{event.title}</h3>
-                   <p className="text-gray-500 mt-2"><Calendar className="inline mr-2" size={16}/>{event.date} at {event.time}</p>
-                   <p className="text-gray-500 mt-1"><MapPin className="inline mr-2" size={16}/>{event.venue}</p>
-                   <button onClick={() => handleRSVP(event.id)} className="mt-6 bg-[#D48847] text-white px-6 py-2 rounded-xl font-bold w-full hover:bg-[#b87439]">
-                     {event.attendees?.includes(user?.uid) ? 'Ticket Booked ✓' : 'Book Ticket'}
-                   </button>
-                 </div>
-               ))}
-               {events.length === 0 && <p className="text-gray-500 col-span-2">No events available right now.</p>}
-             </div>
-          </div>
-        )}
-
         {currentView === 'create' && renderCreateEvent()}
         {currentView === 'admin' && renderAdminDashboard()}
       </main>
 
-      {/* Footer */}
-      <footer className="w-full border-t border-[#F3E8D8] bg-[#FDFBF7] pt-16 pb-24 md:pb-12 text-center mt-auto">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex justify-center mb-6"><Logo size={50} /></div>
-          <p className="text-[#4A3B32]/70 font-medium mb-4">Funfinity Social Platform. Belagavi, India.</p>
-          <div className="text-xs text-gray-400">© 2026 Funfinity. All rights reserved.</div>
-        </div>
-      </footer>
-
-      {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-xl border-t border-gray-200 flex justify-around p-2 z-50 pb-safe shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+      {/* Global App Mobile Bottom Navigation */}
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-xl border-t border-gray-200 flex justify-around p-2 z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         <button onClick={() => setCurrentView('home')} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${currentView === 'home' ? 'text-[#D48847]' : 'text-gray-400'}`}>
           <Home size={22} strokeWidth={currentView === 'home' ? 2.5 : 2} />
-          <span className="text-[10px] font-bold mt-0.5">Home</span>
-        </button>
-        <button onClick={() => setCurrentView('discover')} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${currentView === 'discover' ? 'text-[#D48847]' : 'text-gray-400'}`}>
-          <Search size={22} strokeWidth={currentView === 'discover' ? 2.5 : 2} />
-          <span className="text-[10px] font-bold mt-0.5">Events</span>
+          <span className="text-[10px] font-bold mt-0.5">Story</span>
         </button>
         <button onClick={() => setCurrentView('create')} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${currentView === 'create' ? 'text-[#D48847]' : 'text-gray-400'}`}>
           <PlusCircle size={22} strokeWidth={currentView === 'create' ? 2.5 : 2} />
           <span className="text-[10px] font-bold mt-0.5">Host</span>
         </button>
-        {userRole === 'admin' && (
-          <button onClick={() => setCurrentView('admin')} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${currentView === 'admin' ? 'text-purple-600' : 'text-purple-300'}`}>
-            <Settings size={22} strokeWidth={currentView === 'admin' ? 2.5 : 2} />
-            <span className="text-[10px] font-bold mt-0.5">Admin</span>
-          </button>
+        {isAdmin && (
+            <button onClick={() => setCurrentView('admin')} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${currentView === 'admin' ? 'text-purple-600' : 'text-gray-400'}`}>
+                <ShieldCheck size={22} strokeWidth={currentView === 'admin' ? 2.5 : 2} />
+                <span className="text-[10px] font-bold mt-0.5">Admin</span>
+            </button>
         )}
       </div>
     </div>
