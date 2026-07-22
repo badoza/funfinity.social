@@ -4,6 +4,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, sig
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, arrayUnion, setDoc } from 'firebase/firestore';
 import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, MessageCircle, Info, Navigation, Coffee, Sparkles, User, LogOut, CheckCircle, XCircle, QrCode, Image as ImageIcon, Megaphone, Edit3, Ticket, MapPinned, PlayCircle, Trash2, ShieldAlert, UploadCloud } from 'lucide-react';
 
+// --- YOUR LIVE FIREBASE CONFIGURATION ---
 const firebaseConfig = {
   apiKey: "AIzaSyBJQGM2mJpGkbJFTH9KiqAr3MQff9VJr_Y",
   authDomain: "funfinity-28521.firebaseapp.com",
@@ -20,7 +21,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
-// The Super Admins Array
+// --- THE SUPER ADMIN MASTERS ---
 const ADMIN_EMAILS = ['tilakdongare064@gmail.com', 'dodge.kunal@gmail.com'];
 const appId = 'funfinity-production';
 
@@ -58,12 +59,11 @@ export default function FunfinityApp() {
     title: '', date: '', time: '', venue: '', mapLink: '', price: '', upiId: '', description: '', vibe: 'Chill', imageUrl: ''
   });
 
-  // Admin State
+  // Admin State (Bulletproofed with Safe Defaults)
   const [announcement, setAnnouncement] = useState("✨ Welcome to Funfinity! The ultimate social club in Belagavi. Join our WhatsApp group!");
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
   const [newLogoUrl, setNewLogoUrl] = useState('');
   const [newMemory, setNewMemory] = useState({ title: '', url: '', type: 'image' });
-  
   const [adForm, setAdForm] = useState({ imageUrl: '', linkUrl: '', isActive: false });
 
   const showToast = (msg, type = 'success') => {
@@ -107,7 +107,7 @@ export default function FunfinityApp() {
     const unsubscribeEvents = onSnapshot(eventsRef, (snapshot) => {
       const fetchedEvents = [];
       snapshot.forEach(doc => fetchedEvents.push({ id: doc.id, ...doc.data() }));
-      setEvents(fetchedEvents.sort((a, b) => b.createdAt - a.createdAt));
+      setEvents(fetchedEvents.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
       setLoading(false);
     }, (error) => {
       console.error("Error fetching events:", error);
@@ -119,18 +119,18 @@ export default function FunfinityApp() {
     const unsubscribeMemories = onSnapshot(memoriesRef, (snapshot) => {
       const fetchedMemories = [];
       snapshot.forEach(doc => fetchedMemories.push({ id: doc.id, ...doc.data() }));
-      setMemories(fetchedMemories.sort((a, b) => b.createdAt - a.createdAt));
+      setMemories(fetchedMemories.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
     }, (error) => {
       console.error("Error fetching memories:", error);
     });
 
-    // Fetch Settings
+    // Fetch Settings with CRASH PROTECTION
     const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings');
     const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setPlatformSettings(data);
-        if (data.adBanner) {
+        setPlatformSettings(data || { logoUrl: null });
+        if (data?.adBanner) {
           setAdForm(data.adBanner);
         }
       }
@@ -166,7 +166,7 @@ export default function FunfinityApp() {
     try {
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=in&limit=5`);
       const data = await res.json();
-      setLocationResults(data);
+      setLocationResults(data || []);
     } catch (err) {
       console.error("Location search failed", err);
       showToast("Failed to search map. Try again.", "error");
@@ -175,8 +175,13 @@ export default function FunfinityApp() {
   };
 
   const initiateRSVP = (event) => {
-    // Safe check for attendees
-    const isAttending = event.attendees?.some(a => (typeof a === 'string' ? a : a?.uid) === user?.uid);
+    // Highly safe attendee checking
+    const isAttending = event?.attendees?.some(a => {
+      if (!a) return false;
+      if (typeof a === 'string') return a === user?.uid;
+      return a.uid === user?.uid;
+    });
+
     if (isAttending) {
       showToast("You are already booked for this event!", "error");
       return;
@@ -200,7 +205,7 @@ export default function FunfinityApp() {
     const attendeeData = { uid: 'guest-' + Date.now(), name: guestForm.name, phone: guestForm.phone, type: 'guest' };
     setShowGuestModal(null);
 
-    if (event.price && parseInt(event.price) > 0 && event.upiId) {
+    if (event?.price && parseInt(event.price) > 0 && event.upiId) {
       setShowPaymentModal({ event, attendeeData });
     } else {
       completeRSVP(event.id, attendeeData);
@@ -255,10 +260,10 @@ export default function FunfinityApp() {
   const handleMemorySubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    let finalUrl = newMemory.url;
+    let finalUrl = newMemory.url || '';
 
     try {
-      if (newMemory.type === 'video') {
+      if (newMemory.type === 'video' && finalUrl) {
         if (finalUrl.includes('youtube.com/watch?v=')) {
           const videoId = new URL(finalUrl).searchParams.get("v");
           finalUrl = `https://www.youtube.com/embed/${videoId}`;
@@ -269,9 +274,9 @@ export default function FunfinityApp() {
       }
 
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'memories'), {
-        title: newMemory.title,
+        title: newMemory.title || 'Untitled',
         url: finalUrl,
-        type: newMemory.type,
+        type: newMemory.type || 'image',
         createdAt: Date.now()
       });
       showToast("Memory added to the Wall!");
@@ -330,7 +335,7 @@ export default function FunfinityApp() {
         <Megaphone size={16} className="mr-2 shrink-0" />
         {isEditingAnnouncement ? (
           <div className="flex gap-2 w-full max-w-lg">
-            <input type="text" value={announcement} onChange={e => setAnnouncement(e.target.value)} className="text-black px-2 py-1 rounded text-xs w-full" />
+            <input type="text" value={announcement || ''} onChange={e => setAnnouncement(e.target.value)} className="text-black px-2 py-1 rounded text-xs w-full" />
             <button onClick={() => setIsEditingAnnouncement(false)} className="bg-black/20 px-3 rounded hover:bg-black/40">Save</button>
           </div>
         ) : (
@@ -369,7 +374,7 @@ export default function FunfinityApp() {
             </button>
           </div>
 
-          {}
+          {/* Admin Advertisement Area */}
           {platformSettings?.adBanner?.isActive && platformSettings?.adBanner?.imageUrl && (
              <a href={platformSettings.adBanner.linkUrl || '#'} target="_blank" rel="noopener noreferrer" className="w-full max-w-4xl mt-4 rounded-3xl overflow-hidden shadow-2xl border-4 border-white block hover:scale-[1.02] transition-transform duration-300 relative group cursor-pointer">
                 <div className="absolute top-4 right-4 bg-black/50 backdrop-blur px-2 py-1 rounded text-[10px] text-white font-bold tracking-widest uppercase z-10">Sponsored</div>
@@ -379,7 +384,8 @@ export default function FunfinityApp() {
         </div>
       </section>
 
-      {memories.length > 0 && (
+      {/* Memory Wall with Safety Checks */}
+      {memories && memories.length > 0 && (
         <section className="py-24 bg-white border-y border-[#F3E8D8]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
@@ -392,14 +398,14 @@ export default function FunfinityApp() {
                 <div key={memory.id} className="break-inside-avoid relative rounded-3xl overflow-hidden shadow-lg border border-gray-100 group">
                   {memory.type === 'video' ? (
                     <div className="aspect-w-16 aspect-h-9 relative">
-                      <iframe src={memory.url} title={memory.title} className="w-full h-64 object-cover" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
+                      <iframe src={memory.url || ''} title={memory.title || 'Video'} className="w-full h-64 object-cover" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
                       <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-black shadow-sm flex items-center gap-1">
                         <PlayCircle size={14} className="text-red-500"/> Video Highlight
                       </div>
                     </div>
                   ) : (
                     <div className="relative">
-                      <img src={memory.url} alt={memory.title} className="w-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+                      <img src={memory.url || ''} alt={memory.title || 'Memory'} className="w-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
                       <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-black shadow-sm flex items-center gap-1">
                         <Camera size={14} className="text-[#D48847]"/> Memory
                       </div>
@@ -439,9 +445,9 @@ export default function FunfinityApp() {
   );
 
   const renderDiscover = () => {
-    const filteredEvents = events.filter(e => {
+    const filteredEvents = (events || []).filter(e => {
       const matchesVibe = activeVibeFilter === 'All' || e.vibe === activeVibeFilter;
-      const matchesSearch = (e.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || (e.venue || '').toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = String(e.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || String(e.venue || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchesVibe && matchesSearch;
     });
 
@@ -498,7 +504,7 @@ export default function FunfinityApp() {
               <input 
                 type="text" 
                 placeholder="Search events, cafes, hosts..." 
-                value={searchQuery}
+                value={searchQuery || ''}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-[#D48847] outline-none font-medium"
               />
@@ -531,14 +537,18 @@ export default function FunfinityApp() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredEvents.map(event => {
-              const isAttending = event.attendees?.some(a => (typeof a === 'string' ? a : a?.uid) === user?.uid);
+              const isAttending = event?.attendees?.some(a => {
+                if (!a) return false;
+                if (typeof a === 'string') return a === user?.uid;
+                return a.uid === user?.uid;
+              });
               const isHost = event.hostId === user?.uid;
               const isPaid = event.price && parseInt(event.price) > 0;
 
               return (
                 <div key={event.id} className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-[#F3E8D8] flex flex-col h-full group">
                   <div className="h-56 overflow-hidden relative shrink-0">
-                    <img src={event.imageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4'} alt={event.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    <img src={event.imageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4'} alt={event.title || 'Event'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                     <div className="absolute top-4 right-4 bg-white/95 backdrop-blur px-3 py-1.5 rounded-full text-xs font-bold text-[#4A3B32] shadow-md flex items-center gap-1 border border-white/20">
                       {isPaid ? `₹${event.price}` : 'FREE ENTRY'}
                     </div>
@@ -546,22 +556,22 @@ export default function FunfinityApp() {
 
                   <div className="p-6 flex flex-col flex-grow relative bg-white">
                     <div className="flex items-center gap-2 text-xs font-bold text-[#D48847] uppercase tracking-wide mb-2">
-                      <Calendar size={14} /> {event.date} • {event.time}
+                      <Calendar size={14} /> {event.date || 'TBD'} • {event.time || 'TBD'}
                     </div>
                     
                     <h3 className="text-2xl font-bold text-[#4A3B32] mb-2 leading-tight">{event.title || 'Untitled Event'}</h3>
                     
                     <div className="flex items-start gap-2 text-sm text-gray-500 mb-4 font-medium line-clamp-2">
                       <MapPin size={16} className="shrink-0 mt-0.5 text-[#D48847]" /> 
-                      <a href={event.mapLink || '#'} target="_blank" rel="noreferrer" className="hover:underline hover:text-[#D48847]">{event.venue}</a>
+                      <a href={event.mapLink || '#'} target="_blank" rel="noreferrer" className="hover:underline hover:text-[#D48847]">{event.venue || 'TBA'}</a>
                     </div>
                     
-                    <p className="text-sm text-gray-600 mb-6 line-clamp-2 flex-grow">{event.description}</p>
+                    <p className="text-sm text-gray-600 mb-6 line-clamp-2 flex-grow">{event.description || ''}</p>
                     
                     <div className="flex justify-between items-center pt-4 border-t border-gray-100 mt-auto">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-xs font-bold text-[#D48847]">
-                          {(event.host || 'H').charAt(0).toUpperCase()}
+                          {String(event.host || 'H').charAt(0).toUpperCase()}
                         </div>
                         <div className="text-xs">
                           <div className="font-bold text-[#4A3B32] flex items-center gap-1">{event.host || 'Verified Host'} <ShieldCheck size={10} className="text-blue-500"/></div>
@@ -613,8 +623,8 @@ export default function FunfinityApp() {
       const eventData = {
         ...newEvent,
         imageUrl: newEvent.imageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3',
-        hostId: user.uid,
-        host: user.displayName || (user.email ? user.email.split('@')[0] : 'Verified Host'),
+        hostId: user?.uid,
+        host: user?.displayName || (user?.email ? user.email.split('@')[0] : 'Verified Host'),
         attendees: [],
         createdAt: Date.now()
       };
@@ -643,16 +653,16 @@ export default function FunfinityApp() {
              <h3 className="font-bold text-[#4A3B32] flex items-center gap-2"><Info size={18}/> 1. The Basics</h3>
              <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">Event Title</label>
-                <input required type="text" placeholder="e.g., Acoustic Campfire Jam" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium" />
+                <input required type="text" placeholder="e.g., Acoustic Campfire Jam" value={newEvent.title || ''} onChange={e => setNewEvent({...newEvent, title: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium" />
              </div>
              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">Date</label>
-                  <input required type="date" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium" />
+                  <input required type="date" value={newEvent.date || ''} onChange={e => setNewEvent({...newEvent, date: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium" />
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">Time</label>
-                  <input required type="time" value={newEvent.time} onChange={e => setNewEvent({...newEvent, time: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium" />
+                  <input required type="time" value={newEvent.time || ''} onChange={e => setNewEvent({...newEvent, time: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium" />
                 </div>
              </div>
           </div>
@@ -660,13 +670,13 @@ export default function FunfinityApp() {
           <div className="bg-blue-50/30 p-6 rounded-2xl border border-blue-100 space-y-4">
              <h3 className="font-bold text-[#4A3B32] flex items-center gap-2"><MapPinned size={18} className="text-blue-500"/> 2. Location (Free Map Search)</h3>
              <div className="flex gap-2 relative">
-                <input type="text" placeholder="Search cafes, landmarks..." value={locationSearchQuery} onChange={e => setLocationSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), searchOSMLocation(locationSearchQuery))} className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-400 outline-none bg-white text-sm font-medium" />
+                <input type="text" placeholder="Search cafes, landmarks..." value={locationSearchQuery || ''} onChange={e => setLocationSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), searchOSMLocation(locationSearchQuery))} className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-400 outline-none bg-white text-sm font-medium" />
                 <button type="button" onClick={() => searchOSMLocation(locationSearchQuery)} className="bg-blue-500 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-600 transition-colors shadow-sm whitespace-nowrap">
                   {isSearchingLocation ? 'Searching...' : 'Search'}
                 </button>
              </div>
              
-             {locationResults.length > 0 && (
+             {locationResults && locationResults.length > 0 && (
                 <div className="bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden z-10">
                    {locationResults.map((loc, idx) => (
                       <div key={idx} onClick={() => {
@@ -683,11 +693,11 @@ export default function FunfinityApp() {
              <div className="grid grid-cols-2 gap-4">
                 <div>
                    <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Selected Venue Name</label>
-                   <input required type="text" value={newEvent.venue} onChange={e => setNewEvent({...newEvent, venue: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-white font-bold text-[#4A3B32]" />
+                   <input required type="text" value={newEvent.venue || ''} onChange={e => setNewEvent({...newEvent, venue: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-white font-bold text-[#4A3B32]" />
                 </div>
                 <div>
                    <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Google Maps Link</label>
-                   <input type="text" value={newEvent.mapLink} onChange={e => setNewEvent({...newEvent, mapLink: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-gray-100 text-gray-500 text-xs truncate" readOnly />
+                   <input type="text" value={newEvent.mapLink || ''} onChange={e => setNewEvent({...newEvent, mapLink: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-gray-100 text-gray-500 text-xs truncate" readOnly />
                 </div>
              </div>
           </div>
@@ -698,11 +708,11 @@ export default function FunfinityApp() {
              <div className="grid grid-cols-2 gap-4">
                 <div>
                    <label className="block text-sm font-bold text-gray-700 mb-1">Ticket Price (₹)</label>
-                   <input type="number" placeholder="Leave 0 for Free Event" value={newEvent.price} onChange={e => setNewEvent({...newEvent, price: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-400 outline-none bg-white font-medium" />
+                   <input type="number" placeholder="Leave 0 for Free Event" value={newEvent.price || ''} onChange={e => setNewEvent({...newEvent, price: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-400 outline-none bg-white font-medium" />
                 </div>
                 <div>
                    <label className="block text-sm font-bold text-gray-700 mb-1">Your UPI ID</label>
-                   <input type="text" placeholder="e.g., phone@paytm" value={newEvent.upiId} onChange={e => setNewEvent({...newEvent, upiId: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-400 outline-none bg-white font-medium" />
+                   <input type="text" placeholder="e.g., phone@paytm" value={newEvent.upiId || ''} onChange={e => setNewEvent({...newEvent, upiId: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-400 outline-none bg-white font-medium" />
                 </div>
              </div>
           </div>
@@ -712,18 +722,18 @@ export default function FunfinityApp() {
              <div className="grid grid-cols-2 gap-4">
                 <div>
                    <label className="block text-sm font-bold text-gray-700 mb-1">Category / Vibe</label>
-                   <select value={newEvent.vibe} onChange={e => setNewEvent({...newEvent, vibe: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium">
+                   <select value={newEvent.vibe || 'Chill'} onChange={e => setNewEvent({...newEvent, vibe: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium">
                      {vibes.filter(v => v !== 'All').map(v => (<option key={v} value={v}>{v}</option>))}
                    </select>
                 </div>
                 <div>
                    <label className="block text-sm font-bold text-gray-700 mb-1">Cover Image URL</label>
-                   <input type="url" placeholder="Paste Unsplash or Image link..." value={newEvent.imageUrl} onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white text-sm" />
+                   <input type="url" placeholder="Paste Unsplash or Image link..." value={newEvent.imageUrl || ''} onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white text-sm" />
                 </div>
              </div>
              <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">Description</label>
-                <textarea required rows="4" placeholder="What should guests expect?" value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium resize-none"></textarea>
+                <textarea required rows="4" placeholder="What should guests expect?" value={newEvent.description || ''} onChange={e => setNewEvent({...newEvent, description: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium resize-none"></textarea>
              </div>
           </div>
 
@@ -747,7 +757,6 @@ export default function FunfinityApp() {
           </div>
         </div>
 
-        {}
         <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
            <h2 className="text-xl font-bold text-[#4A3B32] mb-4 flex items-center gap-2"><Megaphone size={20}/> Global Advertisement Banner</h2>
            <p className="text-sm text-gray-500 mb-6">Display a clickable promo banner directly below the main header on the homepage.</p>
@@ -756,15 +765,15 @@ export default function FunfinityApp() {
               <div className="grid md:grid-cols-2 gap-4">
                  <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Ad Image URL</label>
-                    <input type="url" placeholder="https://imgur.com/your-ad-image.jpg" value={adForm.imageUrl} onChange={e => setAdForm({...adForm, imageUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-gray-50 focus:ring-2 focus:ring-[#D48847]" />
+                    <input type="url" placeholder="https://imgur.com/your-ad-image.jpg" value={adForm?.imageUrl || ''} onChange={e => setAdForm(prev => ({...(prev || {}), imageUrl: e.target.value}))} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-gray-50 focus:ring-2 focus:ring-[#D48847]" />
                  </div>
                  <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Click Link (Target URL)</label>
-                    <input type="url" placeholder="https://link-to-sponsor-or-event.com" value={adForm.linkUrl} onChange={e => setAdForm({...adForm, linkUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-gray-50 focus:ring-2 focus:ring-[#D48847]" />
+                    <input type="url" placeholder="https://link-to-sponsor-or-event.com" value={adForm?.linkUrl || ''} onChange={e => setAdForm(prev => ({...(prev || {}), linkUrl: e.target.value}))} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-gray-50 focus:ring-2 focus:ring-[#D48847]" />
                  </div>
               </div>
               <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                 <input type="checkbox" id="adToggle" checked={adForm.isActive} onChange={e => setAdForm({...adForm, isActive: e.target.checked})} className="w-5 h-5 text-[#D48847] focus:ring-[#D48847] rounded cursor-pointer" />
+                 <input type="checkbox" id="adToggle" checked={adForm?.isActive || false} onChange={e => setAdForm(prev => ({...(prev || {}), isActive: e.target.checked}))} className="w-5 h-5 text-[#D48847] focus:ring-[#D48847] rounded cursor-pointer" />
                  <label htmlFor="adToggle" className="font-bold text-gray-700 cursor-pointer">Activate Ad on Homepage</label>
               </div>
               <button type="submit" disabled={isSubmitting} className="w-full bg-[#D48847] text-white py-3 rounded-xl font-bold hover:bg-[#b5733b] transition-colors shadow-md">
@@ -773,7 +782,6 @@ export default function FunfinityApp() {
            </form>
         </div>
 
-        {/* URL Based Platform Branding (No Storage Needed) */}
         <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
            <div>
               <h2 className="text-xl font-bold text-[#4A3B32] mb-1 flex items-center gap-2"><UploadCloud size={20}/> Platform Branding</h2>
@@ -784,34 +792,33 @@ export default function FunfinityApp() {
                 <Logo size={40} />
               </div>
               <div className="flex w-full gap-2">
-                 <input type="url" placeholder="https://..." value={newLogoUrl} onChange={e => setNewLogoUrl(e.target.value)} className="w-full md:w-64 px-4 py-2 rounded-xl border border-gray-200 outline-none text-sm bg-gray-50" />
+                 <input type="url" placeholder="https://..." value={newLogoUrl || ''} onChange={e => setNewLogoUrl(e.target.value)} className="w-full md:w-64 px-4 py-2 rounded-xl border border-gray-200 outline-none text-sm bg-gray-50" />
                  <button onClick={handleLogoUpdate} disabled={!newLogoUrl || isSubmitting} className="bg-[#D48847] hover:bg-[#b5733b] text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50 transition-colors">Save</button>
               </div>
            </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
-          {/* URL Based Memory Wall Panel */}
           <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
             <h2 className="text-xl font-bold text-[#4A3B32] mb-4 flex items-center gap-2"><Camera size={20}/> Post to Memory Wall</h2>
             <form onSubmit={handleMemorySubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">Title / Description</label>
-                <input required type="text" placeholder="e.g., Epic Saturday Jam!" value={newMemory.title} onChange={e => setNewMemory({...newMemory, title: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-gray-50" />
+                <input required type="text" placeholder="e.g., Epic Saturday Jam!" value={newMemory.title || ''} onChange={e => setNewMemory({...newMemory, title: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-gray-50" />
               </div>
 
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
                  <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Link Type</label>
-                    <select value={newMemory.type} onChange={e => setNewMemory({...newMemory, type: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-white">
+                    <select value={newMemory.type || 'image'} onChange={e => setNewMemory({...newMemory, type: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-white">
                       <option value="image">Image / Photo</option>
                       <option value="video">YouTube Video</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Direct URL Link</label>
-                    <input required type="url" placeholder="https://..." value={newMemory.url} onChange={e => setNewMemory({...newMemory, url: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-white" />
+                    <input required type="url" placeholder="https://..." value={newMemory.url || ''} onChange={e => setNewMemory({...newMemory, url: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-white" />
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 italic font-medium">For photos, upload to a free site like Imgur.com and paste the link. For videos, paste any YouTube link.</p>
@@ -826,7 +833,7 @@ export default function FunfinityApp() {
           <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-auto md:h-[530px]">
             <h2 className="text-xl font-bold text-[#4A3B32] mb-4">Manage Memory Wall</h2>
             <div className="overflow-y-auto flex-1 pr-2 space-y-3">
-              {memories.map(mem => (
+              {(memories || []).map(mem => (
                 <div key={mem.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
                   <div className="flex items-center gap-3 overflow-hidden">
                     {mem.type === 'video' ? <PlayCircle size={24} className="text-red-500 shrink-0"/> : <ImageIcon size={24} className="text-blue-500 shrink-0"/>}
@@ -835,7 +842,7 @@ export default function FunfinityApp() {
                   <button onClick={() => safeDeleteMemory(mem.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={16}/></button>
                 </div>
               ))}
-              {memories.length === 0 && <p className="text-gray-400 text-sm italic">No memories posted yet.</p>}
+              {memories && memories.length === 0 && <p className="text-gray-400 text-sm italic">No memories posted yet.</p>}
             </div>
           </div>
         </div>
@@ -854,11 +861,11 @@ export default function FunfinityApp() {
                 </tr>
               </thead>
               <tbody>
-                {events.map(event => (
+                {(events || []).map(event => (
                   <tr key={event.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                     <td className="p-4 font-bold text-[#4A3B32]">{event.title || 'Untitled'}</td>
                     <td className="p-4 text-gray-600">{event.host || 'Unknown'}</td>
-                    <td className="p-4 text-gray-600">{event.date}</td>
+                    <td className="p-4 text-gray-600">{event.date || 'TBD'}</td>
                     <td className="p-4 font-bold text-[#D48847]">{event.attendees?.length || 0}</td>
                     <td className="p-4">
                       <button onClick={() => safeDeleteEvent(event.id)} className="text-red-500 hover:text-red-700 font-bold bg-red-50 px-3 py-1.5 rounded-lg flex items-center gap-1">
@@ -869,7 +876,7 @@ export default function FunfinityApp() {
                 ))}
               </tbody>
             </table>
-            {events.length === 0 && <p className="text-gray-400 text-sm italic p-4">No active events.</p>}
+            {events && events.length === 0 && <p className="text-gray-400 text-sm italic p-4">No active events.</p>}
           </div>
         </div>
       </div>
@@ -904,7 +911,7 @@ export default function FunfinityApp() {
               {user && !user.isAnonymous ? (
                 <div className="flex items-center gap-3">
                   <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 transition-colors p-2" title="Log Out"><LogOut size={20}/></button>
-                  <div className="w-10 h-10 rounded-full bg-[#D48847] flex items-center justify-center text-white font-bold border-2 border-white shadow-md cursor-pointer hover:scale-105 transition-transform" title={user.email}>
+                  <div className="w-10 h-10 rounded-full bg-[#D48847] flex items-center justify-center text-white font-bold border-2 border-white shadow-md cursor-pointer hover:scale-105 transition-transform" title={user.email || 'Verified User'}>
                     {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
                   </div>
                 </div>
@@ -963,6 +970,7 @@ export default function FunfinityApp() {
         </div>
       </footer>
 
+      {}
       {showAuthModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20">
@@ -995,8 +1003,8 @@ export default function FunfinityApp() {
             <p className="text-sm text-gray-500 mb-6">Enter your details below to receive your ticket via WhatsApp.</p>
             
             <form onSubmit={handleGuestSubmit} className="space-y-4">
-              <input type="text" required placeholder="Full Name" value={guestForm.name} onChange={e => setGuestForm({...guestForm, name: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50" />
-              <input type="tel" required placeholder="WhatsApp Number" value={guestForm.phone} onChange={e => setGuestForm({...guestForm, phone: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50" />
+              <input type="text" required placeholder="Full Name" value={guestForm.name || ''} onChange={e => setGuestForm({...guestForm, name: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50" />
+              <input type="tel" required placeholder="WhatsApp Number" value={guestForm.phone || ''} onChange={e => setGuestForm({...guestForm, phone: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50" />
               
               <button type="submit" className="w-full bg-[#4A3B32] text-white font-bold py-3 rounded-xl hover:bg-black transition-all shadow-md mt-4">
                 Proceed to Booking
@@ -1015,19 +1023,19 @@ export default function FunfinityApp() {
             <div className="bg-[#4A3B32] p-6 text-center text-white relative">
               <button onClick={() => setShowPaymentModal(null)} className="absolute top-4 right-4 text-white/70 hover:text-white"><XCircle size={24}/></button>
               <h3 className="font-bold text-xl mb-1">Complete Booking</h3>
-              <p className="text-[#D48847] text-sm">{showPaymentModal.event.title}</p>
+              <p className="text-[#D48847] text-sm">{showPaymentModal.event?.title || 'Event'}</p>
             </div>
             <div className="p-6 flex flex-col items-center">
-              <div className="text-3xl font-bold text-[#4A3B32] mb-4">₹{showPaymentModal.event.price}</div>
+              <div className="text-3xl font-bold text-[#4A3B32] mb-4">₹{showPaymentModal.event?.price || '0'}</div>
               
               <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 mb-4 w-full flex flex-col items-center">
                 <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">Scan to Pay via any UPI App</p>
-                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`upi://pay?pa=${showPaymentModal.event.upiId}&pn=${encodeURIComponent(showPaymentModal.event.host)}&tn=${encodeURIComponent('Ticket')}&am=${showPaymentModal.event.price}&cu=INR`)}`} alt="UPI QR Code" className="w-40 h-40 rounded-xl shadow-sm bg-white p-2 border border-gray-100" />
-                <p className="text-sm font-medium text-[#4A3B32] mt-3">UPI ID: <span className="font-bold">{showPaymentModal.event.upiId}</span></p>
+                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`upi://pay?pa=${showPaymentModal.event?.upiId}&pn=${encodeURIComponent(showPaymentModal.event?.host || 'Host')}&tn=${encodeURIComponent('Ticket')}&am=${showPaymentModal.event?.price}&cu=INR`)}`} alt="UPI QR Code" className="w-40 h-40 rounded-xl shadow-sm bg-white p-2 border border-gray-100" />
+                <p className="text-sm font-medium text-[#4A3B32] mt-3">UPI ID: <span className="font-bold">{showPaymentModal.event?.upiId}</span></p>
               </div>
 
               <div className="w-full space-y-3">
-                <button onClick={() => completeRSVP(showPaymentModal.event.id, showPaymentModal.attendeeData)} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl hover:bg-green-600 transition-all flex justify-center items-center gap-2 shadow-md">
+                <button onClick={() => completeRSVP(showPaymentModal.event?.id, showPaymentModal.attendeeData)} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl hover:bg-green-600 transition-all flex justify-center items-center gap-2 shadow-md">
                   <CheckCircle size={20} /> I have made the payment
                 </button>
                 <p className="text-xs text-center text-gray-400">Your payment will be verified by the host.</p>
