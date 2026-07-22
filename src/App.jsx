@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, arrayUnion } from 'firebase/firestore';
-import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, MessageCircle, Info, Map as MapIcon, Navigation, Coffee, Sparkles, User, LogOut, Settings, CheckCircle, XCircle, QrCode, Image as ImageIcon, Megaphone, Edit3, Lock, Ticket, MapPinned, PlayCircle, Trash2, ShieldAlert } from 'lucide-react';
+import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, arrayUnion, setDoc } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, MessageCircle, Info, Map as MapIcon, Navigation, Coffee, Sparkles, User, LogOut, Settings, CheckCircle, XCircle, QrCode, Image as ImageIcon, Megaphone, Edit3, Lock, Ticket, MapPinned, PlayCircle, Trash2, ShieldAlert, UploadCloud } from 'lucide-react';
 
 const myFirebaseConfig = {
   apiKey: "AIzaSyBJQGM2mJpGkbJFTH9KiqAr3MQff9VJr_Y",
@@ -23,6 +24,7 @@ const ADMIN_EMAILS = ['tilakdongare064@gmail.com', 'dodge.kunal@gmail.com'];
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();
 
 export default function FunfinityApp() {
@@ -30,6 +32,7 @@ export default function FunfinityApp() {
   const [userRole, setUserRole] = useState('guest'); 
   const [events, setEvents] = useState([]);
   const [memories, setMemories] = useState([]);
+  const [platformSettings, setPlatformSettings] = useState({ logoUrl: null });
   const [currentView, setCurrentView] = useState('home'); 
   const [loading, setLoading] = useState(true);
   
@@ -68,6 +71,8 @@ export default function FunfinityApp() {
   const [newMemory, setNewMemory] = useState({
     title: '', url: '', type: 'image'
   });
+  const [memoryFile, setMemoryFile] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState('');
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -134,9 +139,18 @@ export default function FunfinityApp() {
       console.error("Error fetching memories:", error);
     });
 
+    // Fetch Settings (Logo)
+    const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings');
+    const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setPlatformSettings(docSnap.data());
+      }
+    });
+
     return () => {
       unsubscribeEvents();
       unsubscribeMemories();
+      unsubscribeSettings();
     };
   }, [user]);
 
@@ -284,40 +298,83 @@ export default function FunfinityApp() {
   const handleMemorySubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setUploadProgress('Preparing...');
+    
     let finalUrl = newMemory.url;
-
-    // Convert standard YouTube URLs to embed URLs for iFrames
-    if (newMemory.type === 'video' && finalUrl.includes('youtube.com/watch?v=')) {
-      const videoId = new URL(finalUrl).searchParams.get("v");
-      finalUrl = `https://www.youtube.com/embed/${videoId}`;
-    } else if (newMemory.type === 'video' && finalUrl.includes('youtu.be/')) {
-      const videoId = finalUrl.split('youtu.be/')[1].split('?')[0];
-      finalUrl = `https://www.youtube.com/embed/${videoId}`;
-    }
+    let fileType = newMemory.type;
 
     try {
+      // Handle direct file upload to Firebase Storage
+      if (memoryFile) {
+        setUploadProgress('Uploading file...');
+        const fileRef = ref(storage, `memories/${Date.now()}_${memoryFile.name.replace(/[^a-zA-Z0-9.]/g, '')}`);
+        await uploadBytes(fileRef, memoryFile);
+        finalUrl = await getDownloadURL(fileRef);
+        
+        if (memoryFile.type.startsWith('video/')) {
+          fileType = 'video_file';
+        } else {
+          fileType = 'image';
+        }
+      } 
+      // Convert standard YouTube URLs to embed URLs for iFrames
+      else if (newMemory.type === 'video' && finalUrl.includes('youtube.com/watch?v=')) {
+        const videoId = new URL(finalUrl).searchParams.get("v");
+        finalUrl = `https://www.youtube.com/embed/${videoId}`;
+      } else if (newMemory.type === 'video' && finalUrl.includes('youtu.be/')) {
+        const videoId = finalUrl.split('youtu.be/')[1].split('?')[0];
+        finalUrl = `https://www.youtube.com/embed/${videoId}`;
+      }
+
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'memories'), {
         title: newMemory.title,
         url: finalUrl,
-        type: newMemory.type,
+        type: fileType,
         createdAt: Date.now()
       });
       showToast("Memory added to the Wall!");
       setNewMemory({ title: '', url: '', type: 'image' });
+      setMemoryFile(null);
     } catch (err) {
+      console.error(err);
       showToast("Failed to post memory.", "error");
     }
     setIsSubmitting(false);
+    setUploadProgress('');
   };
 
-  const Logo = ({ size = 45 }) => (
-    <svg width={size} height={size * 0.88} viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg" className="transform hover:scale-105 transition-transform duration-300 shrink-0">
-      <path d="M 28 45 C 10 45, 10 15, 28 15 C 45 15, 55 45, 72 45 C 90 45, 90 15, 72 15 C 55 15, 45 45, 28 45 Z" fill="none" stroke="#D48847" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="28" cy="30" r="4.5" fill="#4A3B32" />
-      <circle cx="72" cy="30" r="4.5" fill="#4A3B32" />
-      <path d="M 32 60 Q 50 78 68 60" fill="none" stroke="#D48847" strokeWidth="8" strokeLinecap="round" />
-    </svg>
-  );
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setIsSubmitting(true);
+    setUploadProgress('Uploading Logo...');
+    try {
+      const logoRef = ref(storage, `settings/app_logo_${Date.now()}`);
+      await uploadBytes(logoRef, file);
+      const downloadUrl = await getDownloadURL(logoRef);
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), { logoUrl: downloadUrl }, { merge: true });
+      showToast("App Icon successfully updated globally!");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to update logo.", "error");
+    }
+    setIsSubmitting(false);
+    setUploadProgress('');
+  };
+
+  const Logo = ({ size = 45 }) => {
+    if (platformSettings?.logoUrl) {
+      return <img src={platformSettings.logoUrl} alt="Funfinity Logo" style={{ width: size, height: size, objectFit: 'contain' }} className="transform hover:scale-105 transition-transform duration-300 shrink-0" />;
+    }
+    return (
+      <svg width={size} height={size * 0.88} viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg" className="transform hover:scale-105 transition-transform duration-300 shrink-0">
+        <path d="M 28 45 C 10 45, 10 15, 28 15 C 45 15, 55 45, 72 45 C 90 45, 90 15, 72 15 C 55 15, 45 45, 28 45 Z" fill="none" stroke="#D48847" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="28" cy="30" r="4.5" fill="#4A3B32" />
+        <circle cx="72" cy="30" r="4.5" fill="#4A3B32" />
+        <path d="M 32 60 Q 50 78 68 60" fill="none" stroke="#D48847" strokeWidth="8" strokeLinecap="round" />
+      </svg>
+    );
+  };
 
   const renderHome = () => (
     <div className="w-full bg-[#FDFBF7] animate-in fade-in duration-500">
@@ -386,6 +443,13 @@ export default function FunfinityApp() {
                       <iframe src={memory.url} title={memory.title} className="w-full h-64 object-cover" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
                       <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-black shadow-sm flex items-center gap-1">
                         <PlayCircle size={14} className="text-red-500"/> Video Highlight
+                      </div>
+                    </div>
+                  ) : memory.type === 'video_file' ? (
+                    <div className="aspect-w-16 aspect-h-9 relative">
+                      <video src={memory.url} controls className="w-full h-64 object-cover"></video>
+                      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-black shadow-sm flex items-center gap-1">
+                        <PlayCircle size={14} className="text-red-500"/> Uploaded Video
                       </div>
                     </div>
                   ) : (
@@ -742,6 +806,24 @@ export default function FunfinityApp() {
           </div>
         </div>
 
+        {/* Global Platform Settings (Logo) */}
+        <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
+           <div>
+              <h2 className="text-xl font-bold text-[#4A3B32] mb-1 flex items-center gap-2"><UploadCloud size={20}/> Platform Branding</h2>
+              <p className="text-sm text-gray-500">Upload a custom logo/icon for Funfinity. This updates the logo instantly across the entire platform.</p>
+           </div>
+           <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
+                <Logo size={40} />
+              </div>
+              <label className={`whitespace-nowrap px-6 py-3 rounded-xl font-bold cursor-pointer transition-colors border shadow-sm flex items-center gap-2 ${isSubmitting && uploadProgress.includes('Logo') ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-[#F3E8D8] text-[#4A3B32] border-[#D48847]/30 hover:bg-[#D48847] hover:text-white'}`}>
+                 <ImageIcon size={18} />
+                 {isSubmitting && uploadProgress.includes('Logo') ? 'Uploading...' : 'Upload New Icon'}
+                 <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={isSubmitting} />
+              </label>
+           </div>
+        </div>
+
         <div className="grid md:grid-cols-2 gap-8">
           {/* Add to Memory Wall Panel */}
           <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
@@ -751,27 +833,39 @@ export default function FunfinityApp() {
                 <label className="block text-sm font-bold text-gray-700 mb-1">Title / Description</label>
                 <input required type="text" placeholder="e.g., Epic Saturday Jam!" value={newMemory.title} onChange={e => setNewMemory({...newMemory, title: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-gray-50" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Media Type</label>
-                  <select value={newMemory.type} onChange={e => setNewMemory({...newMemory, type: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-gray-50">
-                    <option value="image">Image / Photo</option>
-                    <option value="video">YouTube Video</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Direct URL Link</label>
-                  <input required type="url" placeholder="https://..." value={newMemory.url} onChange={e => setNewMemory({...newMemory, url: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-gray-50" />
+
+              {/* Toggle File vs Link */}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
+                 <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Upload Media (Photo/Video)</label>
+                    <input type="file" accept="image/*,video/*" onChange={e => setMemoryFile(e.target.files[0])} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-[#F3E8D8] file:text-[#D48847] hover:file:bg-[#e8d5bc] cursor-pointer" />
+                 </div>
+                 
+                 <div className="text-center text-xs font-bold text-gray-400">— OR PASTE LINK —</div>
+
+                 <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Link Type</label>
+                    <select disabled={!!memoryFile} value={newMemory.type} onChange={e => setNewMemory({...newMemory, type: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-white disabled:opacity-50">
+                      <option value="image">Image / Photo</option>
+                      <option value="video">YouTube Video</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Direct URL Link</label>
+                    <input required={!memoryFile} disabled={!!memoryFile} type="url" placeholder="https://..." value={newMemory.url} onChange={e => setNewMemory({...newMemory, url: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-white disabled:opacity-50" />
+                  </div>
                 </div>
               </div>
-              <button type="submit" disabled={isSubmitting} className="w-full bg-[#D48847] text-white py-3 rounded-xl font-bold hover:bg-[#b5733b] transition-colors">
-                Publish to Home Page
+              
+              <button type="submit" disabled={isSubmitting} className="w-full bg-[#D48847] text-white py-3 rounded-xl font-bold hover:bg-[#b5733b] transition-colors shadow-md">
+                {isSubmitting && uploadProgress ? uploadProgress : 'Publish to Home Page'}
               </button>
             </form>
           </div>
 
           {/* Manage Memories Panel */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-96">
+          <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-auto md:h-[530px]">
             <h2 className="text-xl font-bold text-[#4A3B32] mb-4">Manage Memory Wall</h2>
             <div className="overflow-y-auto flex-1 pr-2 space-y-3">
               {memories.map(mem => (
