@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import React, { useState, useEffect } from 'react';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth, signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, arrayUnion, setDoc } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, MessageCircle, Info, Map as MapIcon, Navigation, Coffee, Sparkles, User, LogOut, Settings, CheckCircle, XCircle, QrCode, Image as ImageIcon, Megaphone, Edit3, Lock, Ticket, MapPinned, PlayCircle, Trash2, ShieldAlert, UploadCloud } from 'lucide-react';
+import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, MessageCircle, Info, Navigation, Coffee, Sparkles, User, LogOut, CheckCircle, XCircle, QrCode, Image as ImageIcon, Megaphone, Edit3, Ticket, MapPinned, PlayCircle, Trash2, ShieldAlert, UploadCloud } from 'lucide-react';
 
-const myFirebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyBJQGM2mJpGkbJFTH9KiqAr3MQff9VJr_Y",
   authDomain: "funfinity-28521.firebaseapp.com",
   projectId: "funfinity-28521",
@@ -15,17 +14,15 @@ const myFirebaseConfig = {
   measurementId: "G-9DEDTCBXL0"
 };
 
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myFirebaseConfig;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'funfinity-production';
+// Safe initialization to prevent Hot-Reload crashes
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const auth = getAuth(app);
+const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
 
 // The Super Admins Array
 const ADMIN_EMAILS = ['tilakdongare064@gmail.com', 'dodge.kunal@gmail.com'];
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
-const googleProvider = new GoogleAuthProvider();
+const appId = 'funfinity-production';
 
 export default function FunfinityApp() {
   const [user, setUser] = useState(null);
@@ -38,41 +35,34 @@ export default function FunfinityApp() {
   
   // Auth State
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
   
+  // Modals & Forms
   const [showPaymentModal, setShowPaymentModal] = useState(null); 
   const [showGuestModal, setShowGuestModal] = useState(null);
   const [guestForm, setGuestForm] = useState({ name: '', phone: '' });
-
-  const [activeVibeFilter, setActiveVibeFilter] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [announcement, setAnnouncement] = useState("✨ Welcome to Funfinity! The ultimate social club in Belagavi. Join our WhatsApp group!");
-  const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
-
-  /* Custom Toast / Notification State */
   const [toast, setToast] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
 
+  // Discover State
+  const [activeVibeFilter, setActiveVibeFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
   const vibes = ['All', 'Chill', 'High Energy', 'Deep Conversations', 'Creative', 'Food & Drink'];
 
+  // Host/Create State
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
   const [locationResults, setLocationResults] = useState([]);
   const [isSearchingLocation, setIsSearchingLocation] = useState(false);
-
   const [newEvent, setNewEvent] = useState({
     title: '', date: '', time: '', venue: '', mapLink: '', price: '', upiId: '', description: '', vibe: 'Chill', imageUrl: ''
   });
 
-  const [newMemory, setNewMemory] = useState({
-    title: '', url: '', type: 'image'
-  });
-  const [memoryFile, setMemoryFile] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState('');
+  // Admin State
+  const [announcement, setAnnouncement] = useState("✨ Welcome to Funfinity! The ultimate social club in Belagavi. Join our WhatsApp group!");
+  const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
+  const [newLogoUrl, setNewLogoUrl] = useState('');
+  const [newMemory, setNewMemory] = useState({ title: '', url: '', type: 'image' });
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -80,21 +70,14 @@ export default function FunfinityApp() {
   };
 
   const openAuthModal = () => {
-    setAuthEmail('');
-    setAuthPassword('');
     setAuthError('');
-    setAuthMode('login');
     setShowAuthModal(true);
   };
 
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (err) {
         console.error("Auth init error:", err);
       }
@@ -117,7 +100,7 @@ export default function FunfinityApp() {
   useEffect(() => {
     if (!user) return;
     
-    // Fetch Events
+    // Fetch Events safely
     const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
     const unsubscribeEvents = onSnapshot(eventsRef, (snapshot) => {
       const fetchedEvents = [];
@@ -129,7 +112,7 @@ export default function FunfinityApp() {
       setLoading(false);
     });
 
-    // Fetch Memories
+    // Fetch Memories safely
     const memoriesRef = collection(db, 'artifacts', appId, 'public', 'data', 'memories');
     const unsubscribeMemories = onSnapshot(memoriesRef, (snapshot) => {
       const fetchedMemories = [];
@@ -139,7 +122,7 @@ export default function FunfinityApp() {
       console.error("Error fetching memories:", error);
     });
 
-    // Fetch Settings (Logo)
+    // Fetch Settings
     const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings');
     const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -159,31 +142,6 @@ export default function FunfinityApp() {
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
       showToast("Successfully logged in! Welcome to Funfinity.");
-    } catch (err) {
-      setAuthError(err.message.replace('Firebase:', '').trim());
-    }
-  };
-
-  const handleEmailAuth = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    
-    // Master Admin Lockout Rule
-    if (authEmail.toLowerCase().trim() === 'tilakdongare064@gmail.com') {
-      setAuthError("Security Guard: The Master Admin must use 'Continue with Google'.");
-      return;
-    }
-
-    try {
-      if (authMode === 'signup') {
-        await createUserWithEmailAndPassword(auth, authEmail, authPassword);
-        setShowAuthModal(false);
-        showToast("Account created successfully! Welcome.");
-      } else {
-        await signInWithEmailAndPassword(auth, authEmail, authPassword);
-        setShowAuthModal(false);
-        showToast("Successfully logged in!");
-      }
     } catch (err) {
       setAuthError(err.message.replace('Firebase:', '').trim());
     }
@@ -211,7 +169,8 @@ export default function FunfinityApp() {
   };
 
   const initiateRSVP = (event) => {
-    const isAttending = event.attendees?.some(a => a.uid === user?.uid);
+    // Safe check for attendees
+    const isAttending = event.attendees?.some(a => (typeof a === 'string' ? a : a?.uid) === user?.uid);
     if (isAttending) {
       showToast("You are already booked for this event!", "error");
       return;
@@ -232,13 +191,7 @@ export default function FunfinityApp() {
   const handleGuestSubmit = (e) => {
     e.preventDefault();
     const event = showGuestModal;
-    const attendeeData = {
-      uid: 'guest-' + Date.now(),
-      name: guestForm.name,
-      phone: guestForm.phone,
-      type: 'guest'
-    };
-    
+    const attendeeData = { uid: 'guest-' + Date.now(), name: guestForm.name, phone: guestForm.phone, type: 'guest' };
     setShowGuestModal(null);
 
     if (event.price && parseInt(event.price) > 0 && event.upiId) {
@@ -251,9 +204,7 @@ export default function FunfinityApp() {
   const completeRSVP = async (eventId, attendeeData) => {
     try {
       const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
-      await updateDoc(eventRef, {
-        attendees: arrayUnion(attendeeData)
-      });
+      await updateDoc(eventRef, { attendees: arrayUnion(attendeeData) });
       setShowPaymentModal(null);
       setGuestForm({ name: '', phone: '' });
       showToast("Successfully booked! Check your WhatsApp/Email for details.");
@@ -298,73 +249,51 @@ export default function FunfinityApp() {
   const handleMemorySubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setUploadProgress('Preparing...');
-    
     let finalUrl = newMemory.url;
-    let fileType = newMemory.type;
 
     try {
-      // Handle direct file upload to Firebase Storage
-      if (memoryFile) {
-        setUploadProgress('Uploading file...');
-        const fileRef = ref(storage, `memories/${Date.now()}_${memoryFile.name.replace(/[^a-zA-Z0-9.]/g, '')}`);
-        await uploadBytes(fileRef, memoryFile);
-        finalUrl = await getDownloadURL(fileRef);
-        
-        if (memoryFile.type.startsWith('video/')) {
-          fileType = 'video_file';
-        } else {
-          fileType = 'image';
+      if (newMemory.type === 'video') {
+        if (finalUrl.includes('youtube.com/watch?v=')) {
+          const videoId = new URL(finalUrl).searchParams.get("v");
+          finalUrl = `https://www.youtube.com/embed/${videoId}`;
+        } else if (finalUrl.includes('youtu.be/')) {
+          const videoId = finalUrl.split('youtu.be/')[1].split('?')[0];
+          finalUrl = `https://www.youtube.com/embed/${videoId}`;
         }
-      } 
-      // Convert standard YouTube URLs to embed URLs for iFrames
-      else if (newMemory.type === 'video' && finalUrl.includes('youtube.com/watch?v=')) {
-        const videoId = new URL(finalUrl).searchParams.get("v");
-        finalUrl = `https://www.youtube.com/embed/${videoId}`;
-      } else if (newMemory.type === 'video' && finalUrl.includes('youtu.be/')) {
-        const videoId = finalUrl.split('youtu.be/')[1].split('?')[0];
-        finalUrl = `https://www.youtube.com/embed/${videoId}`;
       }
 
       await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'memories'), {
         title: newMemory.title,
         url: finalUrl,
-        type: fileType,
+        type: newMemory.type,
         createdAt: Date.now()
       });
       showToast("Memory added to the Wall!");
       setNewMemory({ title: '', url: '', type: 'image' });
-      setMemoryFile(null);
     } catch (err) {
       console.error(err);
       showToast("Failed to post memory.", "error");
     }
     setIsSubmitting(false);
-    setUploadProgress('');
   };
 
-  const handleLogoUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleLogoUpdate = async () => {
+    if (!newLogoUrl) return;
     setIsSubmitting(true);
-    setUploadProgress('Uploading Logo...');
     try {
-      const logoRef = ref(storage, `settings/app_logo_${Date.now()}`);
-      await uploadBytes(logoRef, file);
-      const downloadUrl = await getDownloadURL(logoRef);
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), { logoUrl: downloadUrl }, { merge: true });
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), { logoUrl: newLogoUrl }, { merge: true });
       showToast("App Icon successfully updated globally!");
+      setNewLogoUrl('');
     } catch (err) {
       console.error(err);
       showToast("Failed to update logo.", "error");
     }
     setIsSubmitting(false);
-    setUploadProgress('');
   };
 
   const Logo = ({ size = 45 }) => {
     if (platformSettings?.logoUrl) {
-      return <img src={platformSettings.logoUrl} alt="Funfinity Logo" style={{ width: size, height: size, objectFit: 'contain' }} className="transform hover:scale-105 transition-transform duration-300 shrink-0" />;
+      return <img src={platformSettings.logoUrl} alt="Funfinity Logo" style={{ width: size, height: size, objectFit: 'contain' }} className="transform hover:scale-105 transition-transform duration-300 shrink-0 rounded-full" />;
     }
     return (
       <svg width={size} height={size * 0.88} viewBox="0 0 100 80" xmlns="http://www.w3.org/2000/svg" className="transform hover:scale-105 transition-transform duration-300 shrink-0">
@@ -378,8 +307,6 @@ export default function FunfinityApp() {
 
   const renderHome = () => (
     <div className="w-full bg-[#FDFBF7] animate-in fade-in duration-500">
-      
-      {/* Admin Announcement Bar */}
       <div className="bg-gradient-to-r from-[#D48847] to-[#e09b5f] text-white py-3 px-4 relative flex items-center justify-center text-sm font-bold shadow-sm">
         <Megaphone size={16} className="mr-2 shrink-0" />
         {isEditingAnnouncement ? (
@@ -395,7 +322,6 @@ export default function FunfinityApp() {
         )}
       </div>
 
-      {/* Hero Section */}
       <section className="min-h-[85vh] flex flex-col justify-center items-center text-center px-4 relative overflow-hidden pt-12 pb-20" style={{ backgroundImage: "radial-gradient(circle at center, rgba(212,136,71,0.05) 0%, transparent 70%)" }}>
         <div className="absolute top-1/4 left-10 w-72 h-72 bg-orange-300 rounded-full mix-blend-multiply filter blur-[80px] opacity-30 animate-blob"></div>
         <div className="absolute top-1/3 right-10 w-72 h-72 bg-yellow-200 rounded-full mix-blend-multiply filter blur-[80px] opacity-30 animate-blob animation-delay-2000"></div>
@@ -426,7 +352,6 @@ export default function FunfinityApp() {
         </div>
       </section>
 
-      {/* The Memory Wall Section (Admin-uploaded Media) */}
       {memories.length > 0 && (
         <section className="py-24 bg-white border-y border-[#F3E8D8]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -445,13 +370,6 @@ export default function FunfinityApp() {
                         <PlayCircle size={14} className="text-red-500"/> Video Highlight
                       </div>
                     </div>
-                  ) : memory.type === 'video_file' ? (
-                    <div className="aspect-w-16 aspect-h-9 relative">
-                      <video src={memory.url} controls className="w-full h-64 object-cover"></video>
-                      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-black shadow-sm flex items-center gap-1">
-                        <PlayCircle size={14} className="text-red-500"/> Uploaded Video
-                      </div>
-                    </div>
                   ) : (
                     <div className="relative">
                       <img src={memory.url} alt={memory.title} className="w-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
@@ -461,7 +379,7 @@ export default function FunfinityApp() {
                     </div>
                   )}
                   <div className="p-4 bg-white">
-                    <p className="font-bold text-[#4A3B32] text-sm">{memory.title}</p>
+                    <p className="font-bold text-[#4A3B32] text-sm">{memory.title || 'Special Moment'}</p>
                   </div>
                 </div>
               ))}
@@ -470,7 +388,6 @@ export default function FunfinityApp() {
         </section>
       )}
 
-      {/* Featured Vibe Diagram */}
       <section className="py-24 bg-[#FDFBF7] px-4">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center gap-12">
           <div className="flex-1">
@@ -497,14 +414,12 @@ export default function FunfinityApp() {
   const renderDiscover = () => {
     const filteredEvents = events.filter(e => {
       const matchesVibe = activeVibeFilter === 'All' || e.vibe === activeVibeFilter;
-      const matchesSearch = e.title.toLowerCase().includes(searchQuery.toLowerCase()) || e.venue.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = (e.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || (e.venue || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchesVibe && matchesSearch;
     });
 
     return (
       <div className="space-y-8 animate-in fade-in duration-500 pb-20 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-        
-        {/* Special Strangers Meetup Hero Banner */}
         <div className="bg-[#FFF9F2] rounded-[2.5rem] border-2 border-[#D48847]/20 p-6 md:p-10 shadow-lg relative overflow-hidden flex flex-col md:flex-row gap-8 items-center mb-10">
           <div className="flex-1 z-10 w-full">
             <div className="flex items-center gap-2 mb-4">
@@ -546,7 +461,6 @@ export default function FunfinityApp() {
           </div>
         </div>
 
-        {/* Marketplace Header & Search */}
         <div className="bg-white rounded-3xl p-6 border border-[#F3E8D8] shadow-sm mb-8 flex flex-col md:flex-row gap-4 items-center justify-between">
            <div>
               <h1 className="text-3xl font-bold text-[#4A3B32]">Explore Marketplace</h1>
@@ -590,7 +504,7 @@ export default function FunfinityApp() {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredEvents.map(event => {
-              const isAttending = event.attendees?.some(a => a.uid === user?.uid);
+              const isAttending = event.attendees?.some(a => (typeof a === 'string' ? a : a?.uid) === user?.uid);
               const isHost = event.hostId === user?.uid;
               const isPaid = event.price && parseInt(event.price) > 0;
 
@@ -608,7 +522,7 @@ export default function FunfinityApp() {
                       <Calendar size={14} /> {event.date} • {event.time}
                     </div>
                     
-                    <h3 className="text-2xl font-bold text-[#4A3B32] mb-2 leading-tight">{event.title}</h3>
+                    <h3 className="text-2xl font-bold text-[#4A3B32] mb-2 leading-tight">{event.title || 'Untitled Event'}</h3>
                     
                     <div className="flex items-start gap-2 text-sm text-gray-500 mb-4 font-medium line-clamp-2">
                       <MapPin size={16} className="shrink-0 mt-0.5 text-[#D48847]" /> 
@@ -620,10 +534,10 @@ export default function FunfinityApp() {
                     <div className="flex justify-between items-center pt-4 border-t border-gray-100 mt-auto">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-xs font-bold text-[#D48847]">
-                          {(event.host || 'H')[0].toUpperCase()}
+                          {(event.host || 'H').charAt(0).toUpperCase()}
                         </div>
                         <div className="text-xs">
-                          <div className="font-bold text-[#4A3B32] flex items-center gap-1">{event.host} <ShieldCheck size={10} className="text-blue-500"/></div>
+                          <div className="font-bold text-[#4A3B32] flex items-center gap-1">{event.host || 'Verified Host'} <ShieldCheck size={10} className="text-blue-500"/></div>
                           <div className="text-gray-400 font-medium">{event.attendees?.length || 0} attending</div>
                         </div>
                       </div>
@@ -673,7 +587,7 @@ export default function FunfinityApp() {
         ...newEvent,
         imageUrl: newEvent.imageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3',
         hostId: user.uid,
-        host: user.displayName || user.email?.split('@')[0] || 'Verified Host',
+        host: user.displayName || (user.email ? user.email.split('@')[0] : 'Verified Host'),
         attendees: [],
         createdAt: Date.now()
       };
@@ -806,26 +720,25 @@ export default function FunfinityApp() {
           </div>
         </div>
 
-        {/* Global Platform Settings (Logo) */}
+        {/* URL Based Platform Branding (No Storage Needed) */}
         <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
            <div>
               <h2 className="text-xl font-bold text-[#4A3B32] mb-1 flex items-center gap-2"><UploadCloud size={20}/> Platform Branding</h2>
-              <p className="text-sm text-gray-500">Upload a custom logo/icon for Funfinity. This updates the logo instantly across the entire platform.</p>
+              <p className="text-sm text-gray-500">Paste an image URL (e.g., from Imgur) to instantly update the logo globally.</p>
            </div>
-           <div className="flex items-center gap-4">
+           <div className="flex items-center gap-4 w-full md:w-auto">
               <div className="w-16 h-16 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
                 <Logo size={40} />
               </div>
-              <label className={`whitespace-nowrap px-6 py-3 rounded-xl font-bold cursor-pointer transition-colors border shadow-sm flex items-center gap-2 ${isSubmitting && uploadProgress.includes('Logo') ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-[#F3E8D8] text-[#4A3B32] border-[#D48847]/30 hover:bg-[#D48847] hover:text-white'}`}>
-                 <ImageIcon size={18} />
-                 {isSubmitting && uploadProgress.includes('Logo') ? 'Uploading...' : 'Upload New Icon'}
-                 <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={isSubmitting} />
-              </label>
+              <div className="flex w-full gap-2">
+                 <input type="url" placeholder="https://..." value={newLogoUrl} onChange={e => setNewLogoUrl(e.target.value)} className="w-full md:w-64 px-4 py-2 rounded-xl border border-gray-200 outline-none text-sm bg-gray-50" />
+                 <button onClick={handleLogoUpdate} disabled={!newLogoUrl || isSubmitting} className="bg-[#D48847] hover:bg-[#b5733b] text-white px-4 py-2 rounded-xl font-bold text-sm disabled:opacity-50 transition-colors">Save</button>
+              </div>
            </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
-          {/* Add to Memory Wall Panel */}
+          {/* URL Based Memory Wall Panel */}
           <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
             <h2 className="text-xl font-bold text-[#4A3B32] mb-4 flex items-center gap-2"><Camera size={20}/> Post to Memory Wall</h2>
             <form onSubmit={handleMemorySubmit} className="space-y-4">
@@ -834,37 +747,29 @@ export default function FunfinityApp() {
                 <input required type="text" placeholder="e.g., Epic Saturday Jam!" value={newMemory.title} onChange={e => setNewMemory({...newMemory, title: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-gray-50" />
               </div>
 
-              {/* Toggle File vs Link */}
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 space-y-4">
-                 <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Upload Media (Photo/Video)</label>
-                    <input type="file" accept="image/*,video/*" onChange={e => setMemoryFile(e.target.files[0])} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-[#F3E8D8] file:text-[#D48847] hover:file:bg-[#e8d5bc] cursor-pointer" />
-                 </div>
-                 
-                 <div className="text-center text-xs font-bold text-gray-400">— OR PASTE LINK —</div>
-
                  <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Link Type</label>
-                    <select disabled={!!memoryFile} value={newMemory.type} onChange={e => setNewMemory({...newMemory, type: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-white disabled:opacity-50">
+                    <select value={newMemory.type} onChange={e => setNewMemory({...newMemory, type: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-white">
                       <option value="image">Image / Photo</option>
                       <option value="video">YouTube Video</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">Direct URL Link</label>
-                    <input required={!memoryFile} disabled={!!memoryFile} type="url" placeholder="https://..." value={newMemory.url} onChange={e => setNewMemory({...newMemory, url: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-white disabled:opacity-50" />
+                    <input required type="url" placeholder="https://..." value={newMemory.url} onChange={e => setNewMemory({...newMemory, url: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-white" />
                   </div>
                 </div>
+                <p className="text-xs text-gray-500 italic font-medium">For photos, upload to a free site like Imgur.com and paste the link. For videos, paste any YouTube link.</p>
               </div>
               
-              <button type="submit" disabled={isSubmitting} className="w-full bg-[#D48847] text-white py-3 rounded-xl font-bold hover:bg-[#b5733b] transition-colors shadow-md">
-                {isSubmitting && uploadProgress ? uploadProgress : 'Publish to Home Page'}
+              <button type="submit" disabled={isSubmitting} className="w-full bg-[#4A3B32] text-white py-3 rounded-xl font-bold hover:bg-black transition-colors shadow-md">
+                {isSubmitting ? 'Publishing...' : 'Publish to Home Page'}
               </button>
             </form>
           </div>
 
-          {/* Manage Memories Panel */}
           <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-auto md:h-[530px]">
             <h2 className="text-xl font-bold text-[#4A3B32] mb-4">Manage Memory Wall</h2>
             <div className="overflow-y-auto flex-1 pr-2 space-y-3">
@@ -872,7 +777,7 @@ export default function FunfinityApp() {
                 <div key={mem.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
                   <div className="flex items-center gap-3 overflow-hidden">
                     {mem.type === 'video' ? <PlayCircle size={24} className="text-red-500 shrink-0"/> : <ImageIcon size={24} className="text-blue-500 shrink-0"/>}
-                    <span className="font-bold text-sm truncate">{mem.title}</span>
+                    <span className="font-bold text-sm truncate">{mem.title || 'Untitled'}</span>
                   </div>
                   <button onClick={() => safeDeleteMemory(mem.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={16}/></button>
                 </div>
@@ -882,7 +787,6 @@ export default function FunfinityApp() {
           </div>
         </div>
 
-        {/* Global Event Management */}
         <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
           <h2 className="text-xl font-bold text-[#4A3B32] mb-4 flex items-center gap-2"><Ticket size={20}/> Global Event Management</h2>
           <div className="overflow-x-auto">
@@ -899,8 +803,8 @@ export default function FunfinityApp() {
               <tbody>
                 {events.map(event => (
                   <tr key={event.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="p-4 font-bold text-[#4A3B32]">{event.title}</td>
-                    <td className="p-4 text-gray-600">{event.host}</td>
+                    <td className="p-4 font-bold text-[#4A3B32]">{event.title || 'Untitled'}</td>
+                    <td className="p-4 text-gray-600">{event.host || 'Unknown'}</td>
                     <td className="p-4 text-gray-600">{event.date}</td>
                     <td className="p-4 font-bold text-[#D48847]">{event.attendees?.length || 0}</td>
                     <td className="p-4">
@@ -948,7 +852,7 @@ export default function FunfinityApp() {
                 <div className="flex items-center gap-3">
                   <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 transition-colors p-2" title="Log Out"><LogOut size={20}/></button>
                   <div className="w-10 h-10 rounded-full bg-[#D48847] flex items-center justify-center text-white font-bold border-2 border-white shadow-md cursor-pointer hover:scale-105 transition-transform" title={user.email}>
-                    {user.email ? user.email[0].toUpperCase() : 'U'}
+                    {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
                   </div>
                 </div>
               ) : (
@@ -968,7 +872,6 @@ export default function FunfinityApp() {
         {currentView === 'admin' && renderAdmin()}
       </main>
 
-      {}
       <div className="md:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-xl border-t border-gray-200 flex justify-around p-2 z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         <button onClick={() => setCurrentView('home')} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${currentView === 'home' ? 'text-[#D48847]' : 'text-gray-400 hover:text-gray-600'}`}>
           <Home size={22} strokeWidth={currentView === 'home' ? 2.5 : 2} />
@@ -1007,7 +910,6 @@ export default function FunfinityApp() {
         </div>
       </footer>
 
-      {/* Auth Modal */}
       {showAuthModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20">
@@ -1017,30 +919,7 @@ export default function FunfinityApp() {
                 <button onClick={() => setShowAuthModal(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors"><XCircle size={24} /></button>
               </div>
               <h2 className="text-3xl font-bold text-[#4A3B32] mb-2">Join the Club</h2>
-              <p className="text-gray-500 font-medium mb-6">Sign in to book tickets, save your favorite venues, and host events.</p>
-              
-              <form onSubmit={handleEmailAuth} className="space-y-4 mb-6">
-                <div>
-                  <input type="email" required placeholder="Email Address" value={authEmail} onChange={e => setAuthEmail(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50" />
-                </div>
-                <div>
-                  <input type="password" required placeholder="Password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50" />
-                </div>
-                <button type="submit" className="w-full bg-[#4A3B32] text-white font-bold py-3 rounded-xl hover:bg-black transition-all shadow-md">
-                  {authMode === 'login' ? 'Log In' : 'Sign Up'}
-                </button>
-                <div className="text-center text-sm font-bold text-gray-500 mt-2">
-                  {authMode === 'login' ? "Don't have an account? " : "Already have an account? "}
-                  <button type="button" onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-[#D48847] hover:underline">
-                    {authMode === 'login' ? 'Sign Up' : 'Log In'}
-                  </button>
-                </div>
-              </form>
-
-              <div className="relative flex items-center justify-center mb-6">
-                <div className="border-t border-gray-200 w-full"></div>
-                <span className="bg-white px-4 text-xs font-bold text-gray-400 uppercase tracking-widest absolute">Or</span>
-              </div>
+              <p className="text-gray-500 font-medium mb-6">Sign in with Google to book tickets, save your favorite venues, and host events instantly.</p>
 
               <button onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 font-bold py-4 px-4 rounded-xl hover:bg-gray-50 transition-all shadow-sm text-lg">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6" />
@@ -1053,7 +932,6 @@ export default function FunfinityApp() {
         </div>
       )}
 
-      {/* Guest Checkout Modal */}
       {showGuestModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col p-6">
@@ -1078,7 +956,6 @@ export default function FunfinityApp() {
         </div>
       )}
 
-      {/* Payment / UPI Display Modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
@@ -1107,7 +984,6 @@ export default function FunfinityApp() {
         </div>
       )}
 
-      {/* Custom Confirmation Modal */}
       {confirmModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl">
@@ -1121,7 +997,6 @@ export default function FunfinityApp() {
         </div>
       )}
 
-      {/* Global Toast Notification */}
       {toast && (
         <div className={`fixed bottom-20 md:bottom-10 right-4 z-[200] px-6 py-3 rounded-full shadow-xl font-bold text-white text-sm flex items-center gap-2 animate-in slide-in-from-bottom-5 duration-300 ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'}`}>
           {toast.type === 'error' ? <ShieldAlert size={18}/> : <CheckCircle size={18}/>}
