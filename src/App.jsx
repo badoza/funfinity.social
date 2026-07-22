@@ -23,7 +23,6 @@ const googleProvider = new GoogleAuthProvider();
 
 // --- THE SUPER ADMIN MASTERS ---
 const ADMIN_EMAILS = ['tilakdongare064@gmail.com', 'dodge.kunal@gmail.com'];
-const appId = 'funfinity-production';
 
 export default function FunfinityApp() {
   const [user, setUser] = useState(null);
@@ -59,7 +58,7 @@ export default function FunfinityApp() {
     title: '', date: '', time: '', venue: '', mapLink: '', price: '', upiId: '', description: '', vibe: 'Chill', imageUrl: ''
   });
 
-  // Admin State (Bulletproofed with Safe Defaults)
+  // Admin State
   const [announcement, setAnnouncement] = useState("✨ Welcome to Funfinity! The ultimate social club in Belagavi. Join our WhatsApp group!");
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
   const [newLogoUrl, setNewLogoUrl] = useState('');
@@ -102,44 +101,49 @@ export default function FunfinityApp() {
   useEffect(() => {
     if (!user) return;
     
-    // Fetch Events safely
-    const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
-    const unsubscribeEvents = onSnapshot(eventsRef, (snapshot) => {
-      const fetchedEvents = [];
-      snapshot.forEach(doc => fetchedEvents.push({ id: doc.id, ...doc.data() }));
-      setEvents(fetchedEvents.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching events:", error);
-      setLoading(false);
-    });
+    let unsubscribeEvents, unsubscribeMemories, unsubscribeSettings;
 
-    // Fetch Memories safely
-    const memoriesRef = collection(db, 'artifacts', appId, 'public', 'data', 'memories');
-    const unsubscribeMemories = onSnapshot(memoriesRef, (snapshot) => {
-      const fetchedMemories = [];
-      snapshot.forEach(doc => fetchedMemories.push({ id: doc.id, ...doc.data() }));
-      setMemories(fetchedMemories.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
-    }, (error) => {
-      console.error("Error fetching memories:", error);
-    });
+    try {
+      // CLEAN, DIRECT DATABASE PATHS - Prevents the WSOD Crash!
+      const eventsRef = collection(db, 'events');
+      unsubscribeEvents = onSnapshot(eventsRef, (snapshot) => {
+        const fetchedEvents = [];
+        snapshot.forEach(doc => fetchedEvents.push({ id: doc.id, ...doc.data() }));
+        setEvents(fetchedEvents.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
+        setLoading(false);
+      }, (error) => {
+        console.error("Error fetching events:", error);
+        setLoading(false);
+      });
 
-    // Fetch Settings with CRASH PROTECTION
-    const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings');
-    const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setPlatformSettings(data || { logoUrl: null });
-        if (data?.adBanner) {
-          setAdForm(data.adBanner);
+      const memoriesRef = collection(db, 'memories');
+      unsubscribeMemories = onSnapshot(memoriesRef, (snapshot) => {
+        const fetchedMemories = [];
+        snapshot.forEach(doc => fetchedMemories.push({ id: doc.id, ...doc.data() }));
+        setMemories(fetchedMemories.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)));
+      }, (error) => {
+        console.error("Error fetching memories:", error);
+      });
+
+      // Even number of path segments (2) fixes the fatal crash
+      const settingsRef = doc(db, 'settings', 'global');
+      unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setPlatformSettings(data || { logoUrl: null });
+          if (data?.adBanner) {
+            setAdForm(data.adBanner);
+          }
         }
-      }
-    });
+      });
+    } catch (err) {
+      console.error("Critical Firebase Setup Error: ", err);
+    }
 
     return () => {
-      unsubscribeEvents();
-      unsubscribeMemories();
-      unsubscribeSettings();
+      if (unsubscribeEvents) unsubscribeEvents();
+      if (unsubscribeMemories) unsubscribeMemories();
+      if (unsubscribeSettings) unsubscribeSettings();
     };
   }, [user]);
 
@@ -175,7 +179,6 @@ export default function FunfinityApp() {
   };
 
   const initiateRSVP = (event) => {
-    // Highly safe attendee checking
     const isAttending = event?.attendees?.some(a => {
       if (!a) return false;
       if (typeof a === 'string') return a === user?.uid;
@@ -214,7 +217,7 @@ export default function FunfinityApp() {
 
   const completeRSVP = async (eventId, attendeeData) => {
     try {
-      const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+      const eventRef = doc(db, 'events', eventId);
       await updateDoc(eventRef, { attendees: arrayUnion(attendeeData) });
       setShowPaymentModal(null);
       setGuestForm({ name: '', phone: '' });
@@ -231,7 +234,7 @@ export default function FunfinityApp() {
       message: "Are you sure you want to permanently delete this event?",
       onConfirm: async () => {
         try {
-          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId));
+          await deleteDoc(doc(db, 'events', eventId));
           showToast("Event deleted successfully.");
         } catch (err) {
           showToast("Failed to delete.", "error");
@@ -247,7 +250,7 @@ export default function FunfinityApp() {
       message: "Are you sure you want to remove this media from the Memory Wall?",
       onConfirm: async () => {
         try {
-          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'memories', memoryId));
+          await deleteDoc(doc(db, 'memories', memoryId));
           showToast("Memory deleted successfully.");
         } catch (err) {
           showToast("Failed to delete.", "error");
@@ -273,7 +276,7 @@ export default function FunfinityApp() {
         }
       }
 
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'memories'), {
+      await addDoc(collection(db, 'memories'), {
         title: newMemory.title || 'Untitled',
         url: finalUrl,
         type: newMemory.type || 'image',
@@ -292,7 +295,7 @@ export default function FunfinityApp() {
     if (!newLogoUrl) return;
     setIsSubmitting(true);
     try {
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), { logoUrl: newLogoUrl }, { merge: true });
+      await setDoc(doc(db, 'settings', 'global'), { logoUrl: newLogoUrl }, { merge: true });
       showToast("App Icon successfully updated globally!");
       setNewLogoUrl('');
     } catch (err) {
@@ -306,7 +309,7 @@ export default function FunfinityApp() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), { adBanner: adForm }, { merge: true });
+      await setDoc(doc(db, 'settings', 'global'), { adBanner: adForm }, { merge: true });
       showToast("Ad Banner updated successfully!");
     } catch (err) {
       console.error(err);
@@ -374,7 +377,6 @@ export default function FunfinityApp() {
             </button>
           </div>
 
-          {/* Admin Advertisement Area */}
           {platformSettings?.adBanner?.isActive && platformSettings?.adBanner?.imageUrl && (
              <a href={platformSettings.adBanner.linkUrl || '#'} target="_blank" rel="noopener noreferrer" className="w-full max-w-4xl mt-4 rounded-3xl overflow-hidden shadow-2xl border-4 border-white block hover:scale-[1.02] transition-transform duration-300 relative group cursor-pointer">
                 <div className="absolute top-4 right-4 bg-black/50 backdrop-blur px-2 py-1 rounded text-[10px] text-white font-bold tracking-widest uppercase z-10">Sponsored</div>
@@ -384,7 +386,7 @@ export default function FunfinityApp() {
         </div>
       </section>
 
-      {/* Memory Wall with Safety Checks */}
+      {/* Memory Wall */}
       {memories && memories.length > 0 && (
         <section className="py-24 bg-white border-y border-[#F3E8D8]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -630,7 +632,7 @@ export default function FunfinityApp() {
       };
 
       try {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), eventData);
+        await addDoc(collection(db, 'events'), eventData);
         setCurrentView('discover');
         setNewEvent({ title: '', date: '', time: '', venue: '', mapLink: '', price: '', upiId: '', description: '', vibe: 'Chill', imageUrl: '' });
         showToast("Event published successfully!");
@@ -932,6 +934,7 @@ export default function FunfinityApp() {
         {currentView === 'admin' && renderAdmin()}
       </main>
 
+      {}
       <div className="md:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-xl border-t border-gray-200 flex justify-around p-2 z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         <button onClick={() => setCurrentView('home')} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${currentView === 'home' ? 'text-[#D48847]' : 'text-gray-400 hover:text-gray-600'}`}>
           <Home size={22} strokeWidth={currentView === 'home' ? 2.5 : 2} />
@@ -970,7 +973,6 @@ export default function FunfinityApp() {
         </div>
       </footer>
 
-      {}
       {showAuthModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20">
