@@ -63,6 +63,8 @@ export default function FunfinityApp() {
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
   const [newLogoUrl, setNewLogoUrl] = useState('');
   const [newMemory, setNewMemory] = useState({ title: '', url: '', type: 'image' });
+  
+  const [adForm, setAdForm] = useState({ imageUrl: '', linkUrl: '', isActive: false });
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -126,7 +128,11 @@ export default function FunfinityApp() {
     const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings');
     const unsubscribeSettings = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
-        setPlatformSettings(docSnap.data());
+        const data = docSnap.data();
+        setPlatformSettings(data);
+        if (data.adBanner) {
+          setAdForm(data.adBanner);
+        }
       }
     });
 
@@ -291,6 +297,19 @@ export default function FunfinityApp() {
     setIsSubmitting(false);
   };
 
+  const handleAdUpdate = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings'), { adBanner: adForm }, { merge: true });
+      showToast("Ad Banner updated successfully!");
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to update Ad Banner.", "error");
+    }
+    setIsSubmitting(false);
+  };
+
   const Logo = ({ size = 45 }) => {
     if (platformSettings?.logoUrl) {
       return <img src={platformSettings.logoUrl} alt="Funfinity Logo" style={{ width: size, height: size, objectFit: 'contain' }} className="transform hover:scale-105 transition-transform duration-300 shrink-0 rounded-full" />;
@@ -349,6 +368,14 @@ export default function FunfinityApp() {
               <User size={20} /> {userRole !== 'guest' ? 'Host an Event' : 'Join the Club'}
             </button>
           </div>
+
+          {}
+          {platformSettings?.adBanner?.isActive && platformSettings?.adBanner?.imageUrl && (
+             <a href={platformSettings.adBanner.linkUrl || '#'} target="_blank" rel="noopener noreferrer" className="w-full max-w-4xl mt-4 rounded-3xl overflow-hidden shadow-2xl border-4 border-white block hover:scale-[1.02] transition-transform duration-300 relative group cursor-pointer">
+                <div className="absolute top-4 right-4 bg-black/50 backdrop-blur px-2 py-1 rounded text-[10px] text-white font-bold tracking-widest uppercase z-10">Sponsored</div>
+                <img src={platformSettings.adBanner.imageUrl} alt="Advertisement" className="w-full h-auto max-h-96 object-cover" />
+             </a>
+          )}
         </div>
       </section>
 
@@ -718,6 +745,32 @@ export default function FunfinityApp() {
             <h1 className="text-3xl font-bold mb-2 flex items-center gap-2"><ShieldAlert size={28} className="text-[#D48847]"/> Admin Command Center</h1>
             <p className="text-[#F3E8D8]">Manage events, photos, and platform settings globally.</p>
           </div>
+        </div>
+
+        {}
+        <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
+           <h2 className="text-xl font-bold text-[#4A3B32] mb-4 flex items-center gap-2"><Megaphone size={20}/> Global Advertisement Banner</h2>
+           <p className="text-sm text-gray-500 mb-6">Display a clickable promo banner directly below the main header on the homepage.</p>
+           
+           <form onSubmit={handleAdUpdate} className="space-y-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Ad Image URL</label>
+                    <input type="url" placeholder="https://imgur.com/your-ad-image.jpg" value={adForm.imageUrl} onChange={e => setAdForm({...adForm, imageUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-gray-50 focus:ring-2 focus:ring-[#D48847]" />
+                 </div>
+                 <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Click Link (Target URL)</label>
+                    <input type="url" placeholder="https://link-to-sponsor-or-event.com" value={adForm.linkUrl} onChange={e => setAdForm({...adForm, linkUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-gray-50 focus:ring-2 focus:ring-[#D48847]" />
+                 </div>
+              </div>
+              <div className="flex items-center gap-3 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                 <input type="checkbox" id="adToggle" checked={adForm.isActive} onChange={e => setAdForm({...adForm, isActive: e.target.checked})} className="w-5 h-5 text-[#D48847] focus:ring-[#D48847] rounded cursor-pointer" />
+                 <label htmlFor="adToggle" className="font-bold text-gray-700 cursor-pointer">Activate Ad on Homepage</label>
+              </div>
+              <button type="submit" disabled={isSubmitting} className="w-full bg-[#D48847] text-white py-3 rounded-xl font-bold hover:bg-[#b5733b] transition-colors shadow-md">
+                 {isSubmitting ? 'Saving...' : 'Save Ad Settings'}
+              </button>
+           </form>
         </div>
 
         {/* URL Based Platform Branding (No Storage Needed) */}
