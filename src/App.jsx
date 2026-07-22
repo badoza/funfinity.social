@@ -1,53 +1,51 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, arrayUnion, arrayRemove, deleteDoc, setDoc } from 'firebase/firestore';
-import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Flame, Music, Camera, Sun, Heart, Star, MessageCircle, Rocket, Smile, Info, Map as MapIcon, Navigation, Coffee, Sparkles, User, LogOut, Settings, CheckCircle, XCircle, QrCode, Image as ImageIcon, Megaphone, Edit3, Lock, Ticket, MapPinned } from 'lucide-react';
+import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, arrayUnion } from 'firebase/firestore';
+import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, MessageCircle, Info, Map as MapIcon, Navigation, Coffee, Sparkles, User, LogOut, Settings, CheckCircle, XCircle, QrCode, Image as ImageIcon, Megaphone, Edit3, Lock, Ticket, MapPinned } from 'lucide-react';
 
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'funfinity-app-id';
+/* ============================================================================
+   🔥 PASTE YOUR FIREBASE CONFIG HERE FOR GITHUB PAGES TO MAKE IT LIVE
+   ============================================================================ */
+const myFirebaseConfig = {
+  apiKey: "PASTE_API_KEY_HERE",
+  authDomain: "PASTE_AUTH_DOMAIN_HERE",
+  projectId: "funfinity-28521",
+  storageBucket: "PASTE_STORAGE_BUCKET_HERE",
+  messagingSenderId: "PASTE_MESSAGING_SENDER_ID_HERE",
+  appId: "PASTE_APP_ID_HERE"
+};
+
+// We check if it's running in the sandbox context first, otherwise fallback to your live config
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myFirebaseConfig;
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'funfinity-production';
 const ADMIN_EMAIL = 'tilakdongare064@gmail.com';
 
-let app = null;
-let auth = null;
-let db = null;
-let useFirebaseMock = true;
-
-if (firebaseConfig && firebaseConfig.apiKey) {
-  try {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-    useFirebaseMock = false;
-  } catch (error) {
-    console.warn("Firebase config present but failed to connect. Falling back to local storage:", error);
-    useFirebaseMock = true;
-  }
-}
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const googleProvider = new GoogleAuthProvider();
 
 export default function FunfinityApp() {
   const [user, setUser] = useState(null);
-  const [userRole, setUserRole] = useState('guest'); // guest, user, verified_host, admin
+  const [userRole, setUserRole] = useState('guest'); 
   const [events, setEvents] = useState([]);
-  const [hostRequests, setHostRequests] = useState([]);
   const [currentView, setCurrentView] = useState('home'); 
   const [loading, setLoading] = useState(true);
   
-  // Modals & UI State
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [authForm, setAuthForm] = useState({ email: '', password: '' });
   const [authError, setAuthError] = useState('');
   
-  // Payment / RSVP State
-  const [showPaymentModal, setShowPaymentModal] = useState(null); // stores event info for payment
-  
-  // Filters & Search
+  const [showPaymentModal, setShowPaymentModal] = useState(null); 
+  const [showGuestModal, setShowGuestModal] = useState(null);
+  const [guestForm, setGuestForm] = useState({ name: '', phone: '' });
+
   const [activeVibeFilter, setActiveVibeFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Admin Announcement
   const [announcement, setAnnouncement] = useState("✨ Welcome to Funfinity! The ultimate social club in Belagavi. Join our WhatsApp group!");
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
 
@@ -62,48 +60,84 @@ export default function FunfinityApp() {
   });
 
   useEffect(() => {
-    if (useFirebaseMock) {
-      setEvents([
-        {
-          id: 'demo-1', title: 'Strangers Meetup', date: '2026-08-15', time: '19:00', venue: 'La Casa Cafe, Belagavi', price: '150', upiId: 'tilakdongare@ybl', vibe: 'Deep Conversations', description: 'New people, real conversations, endless fun! Coffee on us.', imageUrl: 'https://images.unsplash.com/photo-1528605248644-14dd04022da1?ixlib=rb-4.0.3', hostId: 'admin-id', host: 'Funfinity', attendees: [], mapLink: 'https://maps.google.com'
-        },
-        {
-          id: 'demo-2', title: 'Indie Acoustic Sundowner', date: '2026-08-22', time: '18:00', venue: 'The Rustic Cafe, Belagavi', price: '399', upiId: 'tilakdongare@ybl', vibe: 'Chill', description: 'Unwind with organic coffee and handpicked indie acts.', imageUrl: 'https://images.unsplash.com/photo-1510915228340-29c85a43dcfe?ixlib=rb-4.0.3', hostId: 'user-2', host: 'Rahul', attendees: ['admin-id'], mapLink: ''
-        }
-      ]);
-      setLoading(false);
-      
-      const savedMockUser = localStorage.getItem('mockUser');
-      if (savedMockUser) {
-        const parsedUser = JSON.parse(savedMockUser);
-        setUser(parsedUser);
-        setUserRole(parsedUser.email === ADMIN_EMAIL ? 'admin' : parsedUser.role || 'user');
-      }
-      return;
-    }
-
-    const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser);
-        if (currentUser.email === ADMIN_EMAIL) {
-          setUserRole('admin');
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-          setUserRole('user'); // In prod, fetch real role from DB
+          await signInAnonymously(auth);
         }
+      } catch (err) {
+        console.error("Auth init error:", err);
+      }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser?.email === ADMIN_EMAIL) {
+        setUserRole('admin');
+      } else if (currentUser && !currentUser.isAnonymous) {
+        setUserRole('user');
       } else {
-        setUser(null);
         setUserRole('guest');
       }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
+    const unsubscribeEvents = onSnapshot(eventsRef, (snapshot) => {
+      const fetchedEvents = [];
+      snapshot.forEach(doc => fetchedEvents.push({ id: doc.id, ...doc.data() }));
+      // Sort by creation time newest first
+      setEvents(fetchedEvents.sort((a, b) => b.createdAt - a.createdAt));
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching events:", error);
       setLoading(false);
     });
-    return () => unsubscribeAuth();
-  }, []);
+    return () => unsubscribeEvents();
+  }, [user]);
+
+  const handleEmailAuth = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      if (authMode === 'login') {
+        await signInWithEmailAndPassword(auth, authForm.email, authForm.password);
+      } else {
+        await createUserWithEmailAndPassword(auth, authForm.email, authForm.password);
+      }
+      setShowAuthModal(false);
+      setAuthForm({ email: '', password: '' });
+    } catch (err) {
+      setAuthError(err.message.replace('Firebase:', '').trim());
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      setShowAuthModal(false);
+    } catch (err) {
+      setAuthError(err.message.replace('Firebase:', '').trim());
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    // Fall back to anonymous for browsing
+    await signInAnonymously(auth); 
+    setCurrentView('home');
+  };
 
   const searchOSMLocation = async (query) => {
     if (!query) return;
     setIsSearchingLocation(true);
     try {
-      // Free OpenStreetMap API restricted to India for better results
       const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=in&limit=5`);
       const data = await res.json();
       setLocationResults(data);
@@ -113,63 +147,69 @@ export default function FunfinityApp() {
     setIsSearchingLocation(false);
   };
 
-  const handleEmailAuth = async (e) => {
-    e.preventDefault();
-    if (useFirebaseMock) {
-      const mockUser = { uid: 'mock-user-' + Date.now(), email: authForm.email, displayName: authForm.email.split('@')[0], role: authForm.email === ADMIN_EMAIL ? 'admin' : 'user' };
-      setUser(mockUser);
-      setUserRole(mockUser.role);
-      localStorage.setItem('mockUser', JSON.stringify(mockUser));
-      setShowAuthModal(false);
-      return;
-    }
-    // ... (Real Firebase Auth logic remains the same)
-  };
-
-  const handleLogout = () => {
-    if (useFirebaseMock) {
-      setUser(null);
-      setUserRole('guest');
-      localStorage.removeItem('mockUser');
-      setCurrentView('home');
-      return;
-    }
-    signOut(auth);
-    setCurrentView('home');
-  };
-
   const initiateRSVP = (event) => {
-    if (!user) {
-      setShowAuthModal(true);
+    const isAttending = event.attendees?.some(a => a.uid === user?.uid);
+    if (isAttending) {
+      // Logic to cancel RSVP would go here
+      alert("You are already booked for this event!");
+      return;
+    } 
+    
+    // Check if user is anonymous (needs to login or use guest checkout)
+    if (!user || user.isAnonymous) {
+      setShowGuestModal(event);
       return;
     }
-    const isAttending = event.attendees?.includes(user?.uid);
-    if (isAttending) {
-      // Already attending, cancel it
-      completeRSVP(event.id, true);
-    } else if (event.price && parseInt(event.price) > 0 && event.upiId) {
-      // Requires payment
-      setShowPaymentModal(event);
+
+    // Authenticated user
+    if (event.price && parseInt(event.price) > 0 && event.upiId) {
+      setShowPaymentModal({ event, attendeeData: { uid: user.uid, name: user.displayName || user.email || 'Verified User', type: 'user' } });
     } else {
-      // Free event
-      completeRSVP(event.id, false);
+      completeRSVP(event.id, { uid: user.uid, name: user.displayName || user.email || 'Verified User', type: 'user' });
     }
   };
 
-  const completeRSVP = async (eventId, isAttending) => {
-    if (useFirebaseMock) {
-      setEvents(prev => prev.map(evt => {
-        if (evt.id === eventId) {
-          const attendees = evt.attendees || [];
-          if (isAttending) return { ...evt, attendees: attendees.filter(id => id !== user.uid) };
-          return { ...evt, attendees: [...attendees, user.uid] };
-        }
-        return evt;
-      }));
-      setShowPaymentModal(null);
-      return;
+  const handleGuestSubmit = (e) => {
+    e.preventDefault();
+    const event = showGuestModal;
+    const attendeeData = {
+      uid: 'guest-' + Date.now(),
+      name: guestForm.name,
+      phone: guestForm.phone,
+      type: 'guest'
+    };
+    
+    setShowGuestModal(null);
+
+    if (event.price && parseInt(event.price) > 0 && event.upiId) {
+      setShowPaymentModal({ event, attendeeData });
+    } else {
+      completeRSVP(event.id, attendeeData);
     }
-    // ... Real Firebase updateDoc logic
+  };
+
+  const completeRSVP = async (eventId, attendeeData) => {
+    try {
+      const eventRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
+      await updateDoc(eventRef, {
+        attendees: arrayUnion(attendeeData)
+      });
+      setShowPaymentModal(null);
+      setGuestForm({ name: '', phone: '' });
+      alert("Successfully booked! Check your WhatsApp/Email for details.");
+    } catch (err) {
+      console.error("RSVP failed", err);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    if (window.confirm("Are you sure you want to delete this event?")) {
+      try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId));
+      } catch (err) {
+        console.error("Delete failed", err);
+      }
+    }
   };
 
   const Logo = ({ size = 45 }) => (
@@ -180,43 +220,6 @@ export default function FunfinityApp() {
       <path d="M 32 60 Q 50 78 68 60" fill="none" stroke="#D48847" strokeWidth="8" strokeLinecap="round" />
     </svg>
   );
-
-  const PaymentModal = () => {
-    if (!showPaymentModal) return null;
-    const event = showPaymentModal;
-    // Generate standard UPI Intent URI
-    const upiLink = `upi://pay?pa=${event.upiId}&pn=${encodeURIComponent(event.host)}&tn=${encodeURIComponent('Ticket for ' + event.title)}&am=${event.price}&cu=INR`;
-    // Use free API to generate QR Code from UPI string
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiLink)}`;
-
-    return (
-      <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-        <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
-          <div className="bg-[#4A3B32] p-6 text-center text-white relative">
-            <button onClick={() => setShowPaymentModal(null)} className="absolute top-4 right-4 text-white/70 hover:text-white"><XCircle size={24}/></button>
-            <h3 className="font-bold text-xl mb-1">Complete Booking</h3>
-            <p className="text-[#D48847] text-sm">{event.title}</p>
-          </div>
-          <div className="p-6 flex flex-col items-center">
-            <div className="text-3xl font-bold text-[#4A3B32] mb-4">₹{event.price}</div>
-            
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 mb-4 w-full flex flex-col items-center">
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">Scan to Pay via any UPI App</p>
-              <img src={qrUrl} alt="UPI QR Code" className="w-40 h-40 rounded-xl shadow-sm bg-white p-2 border border-gray-100" />
-              <p className="text-sm font-medium text-[#4A3B32] mt-3">UPI ID: <span className="font-bold">{event.upiId}</span></p>
-            </div>
-
-            <div className="w-full space-y-3">
-              <button onClick={() => completeRSVP(event.id, false)} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl hover:bg-green-600 transition-all flex justify-center items-center gap-2 shadow-md">
-                <CheckCircle size={20} /> I have made the payment
-              </button>
-              <p className="text-xs text-center text-gray-400">Your payment will be verified by the host. Fake RSVPs will lead to a ban.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const renderHome = () => (
     <div className="w-full bg-[#FDFBF7] animate-in fade-in duration-500">
@@ -237,10 +240,7 @@ export default function FunfinityApp() {
         )}
       </div>
 
-      {/* Hero Section */}
       <section className="min-h-[85vh] flex flex-col justify-center items-center text-center px-4 relative overflow-hidden pt-12 pb-20" style={{ backgroundImage: "radial-gradient(circle at center, rgba(212,136,71,0.05) 0%, transparent 70%)" }}>
-        
-        {/* Floating Ambient Blobs */}
         <div className="absolute top-1/4 left-10 w-72 h-72 bg-orange-300 rounded-full mix-blend-multiply filter blur-[80px] opacity-30 animate-blob"></div>
         <div className="absolute top-1/3 right-10 w-72 h-72 bg-yellow-200 rounded-full mix-blend-multiply filter blur-[80px] opacity-30 animate-blob animation-delay-2000"></div>
 
@@ -263,12 +263,12 @@ export default function FunfinityApp() {
             <button onClick={() => setCurrentView('discover')} className="bg-[#4A3B32] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-black transition-all shadow-xl hover:-translate-y-1 flex items-center justify-center gap-2 group">
               <Search size={20} className="group-hover:rotate-12 transition-transform" /> Explore Events
             </button>
-            <button onClick={() => { user ? setCurrentView('profile') : setShowAuthModal(true) }} className="bg-white text-[#4A3B32] border-2 border-[#F3E8D8] px-8 py-4 rounded-full font-bold text-lg hover:border-[#D48847] hover:bg-orange-50 transition-all shadow-sm flex items-center justify-center gap-2">
-              <User size={20} /> {user ? 'My Dashboard' : 'Join the Club'}
+            <button onClick={() => { userRole !== 'guest' ? setCurrentView('profile') : setShowAuthModal(true) }} className="bg-white text-[#4A3B32] border-2 border-[#F3E8D8] px-8 py-4 rounded-full font-bold text-lg hover:border-[#D48847] hover:bg-orange-50 transition-all shadow-sm flex items-center justify-center gap-2">
+              <User size={20} /> {userRole !== 'guest' ? 'My Dashboard' : 'Join the Club'}
             </button>
           </div>
 
-          {/* Social Proof & Instagram Vibe Wall */}
+          {/* Social Proof & Vibe Wall */}
           <div className="w-full max-w-4xl mx-auto border-t border-gray-200 pt-10">
              <div className="flex items-center justify-center gap-2 mb-8">
                 <i className="fab fa-instagram text-xl text-[#D48847]"></i>
@@ -284,41 +284,10 @@ export default function FunfinityApp() {
           </div>
         </div>
       </section>
-
-      {/* Feature Breakdown */}
-      <section className="py-24 bg-white px-4 border-y border-[#F3E8D8]">
-        <div className="max-w-7xl mx-auto grid md:grid-cols-3 gap-12 text-center">
-          <div className="p-6 rounded-3xl hover:bg-[#FDFBF7] transition-colors border border-transparent hover:border-[#F3E8D8]">
-            <div className="w-16 h-16 mx-auto bg-orange-50 rounded-2xl flex items-center justify-center mb-6 shadow-inner border border-orange-100 text-[#D48847]">
-              <Sparkles size={32} />
-            </div>
-            <h3 className="text-2xl font-bold text-[#4A3B32] mb-3">Curated Experiences</h3>
-            <p className="text-gray-500 leading-relaxed font-medium">From acoustic campfire jams to exclusive rooftop mixers. Every event is vetted for quality and vibe.</p>
-          </div>
-          <div className="p-6 rounded-3xl hover:bg-[#FDFBF7] transition-colors border border-transparent hover:border-[#F3E8D8]">
-            <div className="w-16 h-16 mx-auto bg-blue-50 rounded-2xl flex items-center justify-center mb-6 shadow-inner border border-blue-100 text-blue-500">
-              <ShieldCheck size={32} />
-            </div>
-            <h3 className="text-2xl font-bold text-[#4A3B32] mb-3">Verified Community</h3>
-            <p className="text-gray-500 leading-relaxed font-medium">Safety is our priority. Hosts are identity-verified, ensuring a highly secure environment.</p>
-          </div>
-          <div className="p-6 rounded-3xl hover:bg-[#FDFBF7] transition-colors border border-transparent hover:border-[#F3E8D8] relative overflow-hidden group">
-            <div className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-3xl">
-               <span className="bg-black text-white px-4 py-2 rounded-full font-bold text-sm flex items-center gap-2"><Lock size={14}/> Unlock by attending</span>
-            </div>
-            <div className="w-16 h-16 mx-auto bg-pink-50 rounded-2xl flex items-center justify-center mb-6 shadow-inner border border-pink-100 text-pink-500">
-              <Camera size={32} />
-            </div>
-            <h3 className="text-2xl font-bold text-[#4A3B32] mb-3">The Memory Wall</h3>
-            <p className="text-gray-500 leading-relaxed font-medium">Attend an event to unlock its private gallery. Share photos and connect with the exact people you met.</p>
-          </div>
-        </div>
-      </section>
     </div>
   );
 
   const renderDiscover = () => {
-    // Search & Filter Logic
     const filteredEvents = events.filter(e => {
       const matchesVibe = activeVibeFilter === 'All' || e.vibe === activeVibeFilter;
       const matchesSearch = e.title.toLowerCase().includes(searchQuery.toLowerCase()) || e.venue.toLowerCase().includes(searchQuery.toLowerCase());
@@ -346,7 +315,6 @@ export default function FunfinityApp() {
            </div>
         </div>
 
-        {/* Vibe Filters */}
         <div className="flex overflow-x-auto hide-scrollbar gap-2 w-full pb-2">
           {vibes.map(vibe => (
             <button 
@@ -359,37 +327,33 @@ export default function FunfinityApp() {
           ))}
         </div>
 
-        {/* Event Grid */}
-        {filteredEvents.length === 0 ? (
+        {loading ? (
+          <div className="flex justify-center items-center h-48">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D48847]"></div>
+          </div>
+        ) : filteredEvents.length === 0 ? (
           <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-300">
              <Search className="mx-auto h-12 w-12 text-gray-300 mb-4" />
              <h3 className="text-xl font-bold text-gray-400 mb-2">No events found</h3>
-             <p className="text-gray-500">Try adjusting your filters or search terms.</p>
+             <p className="text-gray-500 mb-4">Be the first to host this kind of vibe in Belagavi!</p>
+             <button onClick={() => setCurrentView('create')} className="bg-[#4A3B32] text-white px-6 py-2 rounded-full font-bold hover:bg-black transition-colors">Create Event</button>
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredEvents.map(event => {
-              const isAttending = event.attendees?.includes(user?.uid);
+              const isAttending = event.attendees?.some(a => a.uid === user?.uid);
               const isHost = event.hostId === user?.uid;
               const isPaid = event.price && parseInt(event.price) > 0;
 
               return (
                 <div key={event.id} className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-[#F3E8D8] flex flex-col h-full group">
-                  
-                  {/* Image Section */}
                   <div className="h-56 overflow-hidden relative shrink-0">
-                    <img src={event.imageUrl} alt={event.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    <img src={event.imageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4'} alt={event.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                     <div className="absolute top-4 right-4 bg-white/95 backdrop-blur px-3 py-1.5 rounded-full text-xs font-bold text-[#4A3B32] shadow-md flex items-center gap-1 border border-white/20">
                       {isPaid ? `₹${event.price}` : 'FREE ENTRY'}
                     </div>
-                    {event.vibe && (
-                       <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-md text-[10px] font-bold text-white uppercase tracking-wider">
-                         {event.vibe}
-                       </div>
-                    )}
                   </div>
 
-                  {/* Content Section */}
                   <div className="p-6 flex flex-col flex-grow relative bg-white">
                     <div className="flex items-center gap-2 text-xs font-bold text-[#D48847] uppercase tracking-wide mb-2">
                       <Calendar size={14} /> {event.date} • {event.time}
@@ -397,18 +361,17 @@ export default function FunfinityApp() {
                     
                     <h3 className="text-2xl font-bold text-[#4A3B32] mb-2 leading-tight">{event.title}</h3>
                     
-                    <div className="flex items-start gap-2 text-sm text-gray-500 mb-4 font-medium h-10 line-clamp-2">
+                    <div className="flex items-start gap-2 text-sm text-gray-500 mb-4 font-medium line-clamp-2">
                       <MapPin size={16} className="shrink-0 mt-0.5 text-[#D48847]" /> 
                       <a href={event.mapLink || '#'} target="_blank" rel="noreferrer" className="hover:underline hover:text-[#D48847]">{event.venue}</a>
                     </div>
                     
                     <p className="text-sm text-gray-600 mb-6 line-clamp-2 flex-grow">{event.description}</p>
                     
-                    {/* Action Footer */}
                     <div className="flex justify-between items-center pt-4 border-t border-gray-100 mt-auto">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-xs font-bold text-[#D48847]">
-                          {event.host?.[0] || 'H'}
+                          {(event.host || 'H')[0].toUpperCase()}
                         </div>
                         <div className="text-xs">
                           <div className="font-bold text-[#4A3B32] flex items-center gap-1">{event.host} <ShieldCheck size={10} className="text-blue-500"/></div>
@@ -416,12 +379,13 @@ export default function FunfinityApp() {
                         </div>
                       </div>
                       
-                      {isHost ? (
+                      {userRole === 'admin' ? (
+                        <button onClick={() => handleDeleteEvent(event.id)} className="text-red-500 hover:text-red-700 font-bold text-xs bg-red-50 px-3 py-1 rounded-md">Delete Event</button>
+                      ) : isHost ? (
                         <span className="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold text-sm">Managing</span>
                       ) : isAttending ? (
-                        <button onClick={() => initiateRSVP(event)} className="bg-green-50 text-green-700 hover:bg-red-50 hover:text-red-600 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-1 transition-colors border border-green-200 group/btn">
-                          <span className="group-hover/btn:hidden flex items-center gap-1"><Ticket size={16} /> Booked</span>
-                          <span className="hidden group-hover/btn:inline">Cancel</span>
+                        <button className="bg-green-50 text-green-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-1 border border-green-200">
+                           <Ticket size={16} /> Booked
                         </button>
                       ) : (
                         <button onClick={() => initiateRSVP(event)} className="bg-[#4A3B32] hover:bg-black text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-2">
@@ -440,16 +404,18 @@ export default function FunfinityApp() {
   };
 
   const renderCreateEvent = () => {
-    if (userRole === 'guest' || userRole === 'user') {
+    // Only Admin or Verified Users can create events automatically. 
+    // For this app, we will let logged-in users access the form, but prompt guests to login.
+    if (!user || user.isAnonymous) {
       return (
         <div className="py-24 text-center max-w-lg mx-auto px-4">
           <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
              <ShieldCheck size={48} className="text-blue-500" />
           </div>
           <h2 className="text-3xl font-bold text-[#4A3B32] mb-4">Host Verification Required</h2>
-          <p className="text-gray-500 mb-8 font-medium">To maintain the highest quality and safety for the Funfinity community, all hosts must undergo a brief identity check before listing events.</p>
-          <button className="bg-[#4A3B32] text-white px-8 py-4 rounded-full font-bold shadow-lg hover:bg-black transition-all transform hover:-translate-y-1 w-full">
-            Submit Host Application via WhatsApp
+          <p className="text-gray-500 mb-8 font-medium">To maintain the highest quality and safety for the Funfinity community, all hosts must log in to create events.</p>
+          <button onClick={() => setShowAuthModal(true)} className="bg-[#4A3B32] text-white px-8 py-4 rounded-full font-bold shadow-lg hover:bg-black transition-all transform hover:-translate-y-1 w-full">
+            Log in to Host
           </button>
         </div>
       );
@@ -462,20 +428,20 @@ export default function FunfinityApp() {
         ...newEvent,
         imageUrl: newEvent.imageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3',
         hostId: user.uid,
-        host: user.displayName || user.email.split('@')[0],
+        host: user.displayName || user.email?.split('@')[0] || 'Verified Host',
         attendees: [],
         createdAt: Date.now()
       };
 
-      if (useFirebaseMock) {
-        setEvents(prev => [{ id: 'mock-' + Date.now(), ...eventData }, ...prev]);
-      } else {
+      try {
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), eventData);
+        setCurrentView('discover');
+        setNewEvent({ title: '', date: '', time: '', venue: '', mapLink: '', price: '', upiId: '', description: '', vibe: 'Chill', imageUrl: '' });
+      } catch (err) {
+        console.error("Failed to create event", err);
+        alert("Failed to create event. Please ensure Firebase is configured.");
       }
-      
       setIsSubmitting(false);
-      setCurrentView('discover');
-      setNewEvent({ title: '', date: '', time: '', venue: '', mapLink: '', price: '', upiId: '', description: '', vibe: 'Chill', imageUrl: '' });
     };
 
     return (
@@ -487,7 +453,6 @@ export default function FunfinityApp() {
         </div>
         
         <form onSubmit={handleCreateSubmit} className="space-y-6">
-          {/* Basics */}
           <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 space-y-4">
              <h3 className="font-bold text-[#4A3B32] flex items-center gap-2"><Info size={18}/> 1. The Basics</h3>
              <div>
@@ -506,22 +471,22 @@ export default function FunfinityApp() {
              </div>
           </div>
 
-          {/* Location Search (OpenStreetMap) */}
           <div className="bg-blue-50/30 p-6 rounded-2xl border border-blue-100 space-y-4">
              <h3 className="font-bold text-[#4A3B32] flex items-center gap-2"><MapPinned size={18} className="text-blue-500"/> 2. Location (Free Map Search)</h3>
              <div className="flex gap-2 relative">
-                <input type="text" placeholder="Search streets, cafes, gullies across India..." value={locationSearchQuery} onChange={e => setLocationSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), searchOSMLocation(locationSearchQuery))} className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-400 outline-none bg-white text-sm font-medium" />
+                <input type="text" placeholder="Search cafes, landmarks..." value={locationSearchQuery} onChange={e => setLocationSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), searchOSMLocation(locationSearchQuery))} className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-400 outline-none bg-white text-sm font-medium" />
                 <button type="button" onClick={() => searchOSMLocation(locationSearchQuery)} className="bg-blue-500 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-600 transition-colors shadow-sm whitespace-nowrap">
                   {isSearchingLocation ? 'Searching...' : 'Search Maps'}
                 </button>
              </div>
              
-             {/* Map Search Results */}
              {locationResults.length > 0 && (
                 <div className="bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden z-10">
                    {locationResults.map((loc, idx) => (
                       <div key={idx} onClick={() => {
-                         setNewEvent({...newEvent, venue: loc.display_name.split(',')[0] + ', ' + (loc.display_name.split(',')[1]||''), mapLink: `https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lon}#map=18/${loc.lat}/${loc.lon}`});
+                         // Generate standard Google Maps Link
+                         const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lon}`;
+                         setNewEvent({...newEvent, venue: loc.display_name.split(',')[0] + ', ' + (loc.display_name.split(',')[1]||''), mapLink: googleMapsUrl});
                          setLocationResults([]); setLocationSearchQuery('');
                       }} className="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer text-sm font-medium text-gray-700">
                          {loc.display_name}
@@ -536,13 +501,12 @@ export default function FunfinityApp() {
                    <input required type="text" value={newEvent.venue} onChange={e => setNewEvent({...newEvent, venue: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-white font-bold text-[#4A3B32]" />
                 </div>
                 <div>
-                   <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Map Link (Auto-filled)</label>
+                   <label className="block text-xs font-bold text-gray-500 mb-1 uppercase tracking-wide">Google Maps Link</label>
                    <input type="text" value={newEvent.mapLink} onChange={e => setNewEvent({...newEvent, mapLink: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none bg-gray-100 text-gray-500 text-xs truncate" readOnly />
                 </div>
              </div>
           </div>
 
-          {/* FinTech / Ticketing */}
           <div className="bg-green-50/30 p-6 rounded-2xl border border-green-100 space-y-4">
              <h3 className="font-bold text-[#4A3B32] flex items-center gap-2"><QrCode size={18} className="text-green-600"/> 3. Ticketing & Direct UPI</h3>
              <p className="text-xs text-gray-500 font-medium">Set a price and provide your UPI ID. We automatically generate a QR code for buyers to pay you directly. 0% Commission.</p>
@@ -558,7 +522,6 @@ export default function FunfinityApp() {
              </div>
           </div>
 
-          {/* Aesthetics */}
           <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 space-y-4">
              <h3 className="font-bold text-[#4A3B32] flex items-center gap-2"><ImageIcon size={18}/> 4. Vibe & Aesthetics</h3>
              <div className="grid grid-cols-2 gap-4">
@@ -569,14 +532,14 @@ export default function FunfinityApp() {
                    </select>
                 </div>
                 <div>
-                   <label className="block text-sm font-bold text-gray-700 mb-1">Cover Image URL</label>
-                   <input type="url" placeholder="Paste Unsplash or Google image link..." value={newEvent.imageUrl} onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white text-sm" />
-                   <p className="text-[10px] text-gray-400 mt-1">*To upload files from computer, setup Firebase Storage.</p>
+                   <label className="block text-sm font-bold text-gray-700 mb-1">Image URL</label>
+                   <input type="url" placeholder="Paste Unsplash or Image link..." value={newEvent.imageUrl} onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white text-sm" />
+                   <p className="text-[10px] text-gray-400 mt-1">*To fetch auto-photos from Maps requires Paid Google API. Paste free links here.</p>
                 </div>
              </div>
              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Description (Markdown Supported)</label>
-                <textarea required rows="4" placeholder="What should guests expect? What is the agenda?" value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium resize-none"></textarea>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Description</label>
+                <textarea required rows="4" placeholder="What should guests expect?" value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white font-medium resize-none"></textarea>
              </div>
           </div>
 
@@ -588,71 +551,27 @@ export default function FunfinityApp() {
     );
   };
 
-  const AuthModal = () => (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20">
-        <div className="p-8">
-          <div className="flex justify-between items-center mb-6">
-            <Logo size={40} />
-            <button onClick={() => setShowAuthModal(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors"><XCircle size={24} /></button>
-          </div>
-          
-          <h2 className="text-3xl font-bold text-[#4A3B32] mb-2">{authMode === 'login' ? 'Welcome back' : 'Create an account'}</h2>
-          <p className="text-gray-500 mb-8 font-medium">Join the most vibrant community in Belagavi.</p>
-
-          <form onSubmit={handleEmailAuth} className="space-y-4">
-            <div>
-              <input type="email" required placeholder="Email address (e.g. tilakdongare064@gmail.com)" value={authForm.email} onChange={e => setAuthForm({...authForm, email: e.target.value})} className="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white transition-all font-medium" />
-            </div>
-            <div>
-              <input type="password" required placeholder="Password (Any password works in Demo Mode)" value={authForm.password} onChange={e => setAuthForm({...authForm, password: e.target.value})} className="w-full px-4 py-3.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50 focus:bg-white transition-all font-medium" />
-            </div>
-            {authError && <p className="text-red-500 text-xs font-bold bg-red-50 p-2 rounded">{authError}</p>}
-            <button type="submit" className="w-full bg-[#4A3B32] text-white font-bold py-4 px-4 rounded-xl hover:bg-black transition-all shadow-lg text-lg">
-              {authMode === 'login' ? 'Sign In' : 'Create Account'}
-            </button>
-          </form>
-
-          <div className="mt-6 text-center text-xs text-gray-400 bg-orange-50 p-3 rounded-lg border border-orange-100 font-medium">
-             💡 <strong>Pro Tip:</strong> Log in with `tilakdongare064@gmail.com` to instantly unlock Admin and Verified Host tools!
-          </div>
-
-          <p className="text-center mt-6 text-sm text-gray-500 font-medium">
-            {authMode === 'login' ? "Don't have an account? " : "Already have an account? "}
-            <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-[#D48847] font-bold hover:underline">
-              {authMode === 'login' ? 'Sign up' : 'Log in'}
-            </button>
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
     <div className="min-h-screen bg-[#FDFBF7] font-sans selection:bg-[#D48847] selection:text-white flex flex-col">
-      {/* Dynamic Navbar */}
-      <nav className={`fixed w-full z-50 transition-all duration-300 ${currentView === 'home' ? 'bg-[#FDFBF7]/80 backdrop-blur-md border-b border-transparent' : 'bg-white border-b border-gray-100 shadow-sm'}`}>
+      <nav className={`fixed w-full z-40 transition-all duration-300 ${currentView === 'home' ? 'bg-[#FDFBF7]/80 backdrop-blur-md border-b border-transparent' : 'bg-white border-b border-gray-100 shadow-sm'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
-            {/* Logo */}
             <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setCurrentView('home')}>
               <Logo size={40} />
               <span className="font-bold text-2xl text-[#4A3B32] tracking-tight group-hover:text-[#D48847] transition-colors hidden sm:block">Funfinity</span>
             </div>
             
-            {/* Desktop Tabs */}
             <div className="hidden md:flex items-center gap-2 bg-gray-50/80 p-1 rounded-full border border-gray-100 shadow-inner">
               <button onClick={() => setCurrentView('home')} className={`px-5 py-2 rounded-full font-bold text-sm transition-all ${currentView === 'home' ? 'bg-white shadow-sm text-[#4A3B32]' : 'text-gray-500 hover:text-[#4A3B32]'}`}>Story</button>
               <button onClick={() => setCurrentView('discover')} className={`px-5 py-2 rounded-full font-bold text-sm transition-all ${currentView === 'discover' ? 'bg-white shadow-sm text-[#4A3B32]' : 'text-gray-500 hover:text-[#4A3B32]'}`}>Marketplace</button>
               <button onClick={() => setCurrentView('create')} className={`px-5 py-2 rounded-full font-bold text-sm transition-all ${currentView === 'create' ? 'bg-white shadow-sm text-[#4A3B32]' : 'text-gray-500 hover:text-[#4A3B32]'}`}>Host Experience</button>
             </div>
 
-            {/* Auth/Profile */}
             <div className="flex items-center gap-3">
               <a href="mailto:tilakdongare064@gmail.com" className="hidden lg:flex items-center gap-2 bg-[#F3E8D8] text-[#4A3B32] px-4 py-2 rounded-full font-bold text-sm hover:bg-[#D48847] hover:text-white transition-colors shadow-sm">
                 <MessageCircle size={16} /> Contact Us
               </a>
-              {user ? (
+              {user && !user.isAnonymous ? (
                 <div className="flex items-center gap-3">
                   {userRole === 'admin' && (
                     <span className="hidden sm:flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full font-bold text-xs border border-purple-200">
@@ -661,7 +580,7 @@ export default function FunfinityApp() {
                   )}
                   <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 transition-colors p-2"><LogOut size={20}/></button>
                   <div className="w-10 h-10 rounded-full bg-[#D48847] flex items-center justify-center text-white font-bold border-2 border-white shadow-md cursor-pointer hover:scale-105 transition-transform">
-                    {user.email?.[0].toUpperCase()}
+                    {user.email ? user.email[0].toUpperCase() : 'U'}
                   </div>
                 </div>
               ) : (
@@ -674,19 +593,14 @@ export default function FunfinityApp() {
         </div>
       </nav>
 
-      {/* Main Content Area */}
       <main className="flex-grow w-full flex flex-col items-center pt-20 pb-safe">
         {currentView === 'home' && renderHome()}
         {currentView === 'discover' && renderDiscover()}
         {currentView === 'create' && renderCreateEvent()}
       </main>
 
-      {/* Global Modals */}
-      {showAuthModal && <AuthModal />}
-      {showPaymentModal && <PaymentModal />}
-
       {/* Mobile Bottom Navigation */}
-      <div className="md:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-xl border-t border-gray-200 flex justify-around p-2 z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-xl border-t border-gray-200 flex justify-around p-2 z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         <button onClick={() => setCurrentView('home')} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${currentView === 'home' ? 'text-[#D48847]' : 'text-gray-400 hover:text-gray-600'}`}>
           <Home size={22} strokeWidth={currentView === 'home' ? 2.5 : 2} />
           <span className="text-[10px] font-bold mt-0.5">Story</span>
@@ -699,14 +613,13 @@ export default function FunfinityApp() {
           <PlusCircle size={22} strokeWidth={currentView === 'create' ? 2.5 : 2} />
           <span className="text-[10px] font-bold mt-0.5">Host</span>
         </button>
-        <button onClick={() => !user && setShowAuthModal(true)} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${user ? 'text-[#D48847]' : 'text-gray-400 hover:text-gray-600'}`}>
-          <User size={22} strokeWidth={user ? 2.5 : 2} />
-          <span className="text-[10px] font-bold mt-0.5">{user ? 'Profile' : 'Sign In'}</span>
+        <button onClick={() => (!user || user.isAnonymous) && setShowAuthModal(true)} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${user && !user.isAnonymous ? 'text-[#D48847]' : 'text-gray-400 hover:text-gray-600'}`}>
+          <User size={22} strokeWidth={user && !user.isAnonymous ? 2.5 : 2} />
+          <span className="text-[10px] font-bold mt-0.5">{user && !user.isAnonymous ? 'Profile' : 'Sign In'}</span>
         </button>
       </div>
 
-      {/* Global Footer */}
-      <footer className="w-full border-t border-[#F3E8D8] bg-white pt-16 pb-24 md:pb-12 text-center mt-auto">
+      <footer className="w-full border-t border-[#F3E8D8] bg-white pt-16 pb-24 md:pb-12 text-center mt-auto z-10">
         <div className="max-w-7xl mx-auto px-4 flex flex-col items-center">
           <div className="flex justify-center mb-6 cursor-pointer hover:scale-110 transition-transform" onClick={() => setCurrentView('home')}>
              <Logo size={60} />
@@ -722,19 +635,83 @@ export default function FunfinityApp() {
                <MessageCircle size={20} /> Email the Founder
              </a>
           </div>
-          
-          <div className="mt-16 flex flex-col md:flex-row justify-between items-center w-full border-t border-gray-100 pt-8 gap-4">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-              © 2026 Funfinity Social. Founded by Tilak Dongare.
-            </p>
-            <div className="flex gap-4">
-              <a href="https://www.instagram.com/funfinity.social" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-gray-100 text-[#4A3B32] flex items-center justify-center hover:bg-[#D48847] hover:text-white transition-all transform hover:scale-110 shadow-sm">
-                <i className="fab fa-instagram text-lg"></i>
-              </a>
+        </div>
+      </footer>
+
+      {}
+      {showAuthModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <Logo size={40} />
+                <button onClick={() => setShowAuthModal(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors"><XCircle size={24} /></button>
+              </div>
+              <h2 className="text-3xl font-bold text-[#4A3B32] mb-2">Join the Club</h2>
+              <p className="text-gray-500 font-medium mb-8">Sign in to book tickets, save your favorite venues, and host events.</p>
+              
+              <button onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 font-bold py-4 px-4 rounded-xl hover:bg-gray-50 transition-all mb-4 shadow-sm text-lg">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6" />
+                Continue with Google
+              </button>
+              
+              {authError && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-lg text-center mt-4">{authError}</p>}
             </div>
           </div>
         </div>
-      </footer>
+      )}
+
+      {showGuestModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-xl text-[#4A3B32]">Guest Checkout</h3>
+              <button onClick={() => setShowGuestModal(null)} className="text-gray-400 hover:text-gray-600"><XCircle size={24}/></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">Enter your details below to receive your ticket via WhatsApp.</p>
+            
+            <form onSubmit={handleGuestSubmit} className="space-y-4">
+              <input type="text" required placeholder="Full Name" value={guestForm.name} onChange={e => setGuestForm({...guestForm, name: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50" />
+              <input type="tel" required placeholder="WhatsApp Number" value={guestForm.phone} onChange={e => setGuestForm({...guestForm, phone: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-gray-50" />
+              
+              <button type="submit" className="w-full bg-[#4A3B32] text-white font-bold py-3 rounded-xl hover:bg-black transition-all shadow-md mt-4">
+                Proceed to Booking
+              </button>
+              <button type="button" onClick={() => { setShowGuestModal(null); setShowAuthModal(true); }} className="w-full text-[#D48847] font-bold py-2 text-sm">
+                Wait, I want to Login instead
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
+            <div className="bg-[#4A3B32] p-6 text-center text-white relative">
+              <button onClick={() => setShowPaymentModal(null)} className="absolute top-4 right-4 text-white/70 hover:text-white"><XCircle size={24}/></button>
+              <h3 className="font-bold text-xl mb-1">Complete Booking</h3>
+              <p className="text-[#D48847] text-sm">{showPaymentModal.event.title}</p>
+            </div>
+            <div className="p-6 flex flex-col items-center">
+              <div className="text-3xl font-bold text-[#4A3B32] mb-4">₹{showPaymentModal.event.price}</div>
+              
+              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-200 mb-4 w-full flex flex-col items-center">
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-2">Scan to Pay via any UPI App</p>
+                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`upi://pay?pa=${showPaymentModal.event.upiId}&pn=${encodeURIComponent(showPaymentModal.event.host)}&tn=${encodeURIComponent('Ticket')}&am=${showPaymentModal.event.price}&cu=INR`)}`} alt="UPI QR Code" className="w-40 h-40 rounded-xl shadow-sm bg-white p-2 border border-gray-100" />
+                <p className="text-sm font-medium text-[#4A3B32] mt-3">UPI ID: <span className="font-bold">{showPaymentModal.event.upiId}</span></p>
+              </div>
+
+              <div className="w-full space-y-3">
+                <button onClick={() => completeRSVP(showPaymentModal.event.id, showPaymentModal.attendeeData)} className="w-full bg-green-500 text-white font-bold py-4 rounded-xl hover:bg-green-600 transition-all flex justify-center items-center gap-2 shadow-md">
+                  <CheckCircle size={20} /> I have made the payment
+                </button>
+                <p className="text-xs text-center text-gray-400">Your payment will be verified by the host.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
