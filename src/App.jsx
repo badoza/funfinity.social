@@ -1,22 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, arrayUnion } from 'firebase/firestore';
-import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, MessageCircle, Info, Map as MapIcon, Navigation, Coffee, Sparkles, User, LogOut, Settings, CheckCircle, XCircle, QrCode, Image as ImageIcon, Megaphone, Edit3, Lock, Ticket, MapPinned } from 'lucide-react';
+import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, MessageCircle, Info, Map as MapIcon, Navigation, Coffee, Sparkles, User, LogOut, Settings, CheckCircle, XCircle, QrCode, Image as ImageIcon, Megaphone, Edit3, Lock, Ticket, MapPinned, PlayCircle, Trash2, ShieldAlert } from 'lucide-react';
 
-/* ============================================================================
-   🔥 PASTE YOUR FIREBASE CONFIG HERE FOR GITHUB PAGES TO MAKE IT LIVE
-   ============================================================================ */
-const firebaseConfig = {
+const myFirebaseConfig = {
   apiKey: "AIzaSyBJQGM2mJpGkbJFTH9KiqAr3MQff9VJr_Y",
   authDomain: "funfinity-28521.firebaseapp.com",
   projectId: "funfinity-28521",
   storageBucket: "funfinity-28521.firebasestorage.app",
   messagingSenderId: "493685480978",
-  appId: "1:493685480978:web:8b979f65956217e84fc2cb"
+  appId: "1:493685480978:web:8b979f65956217e84fc2cb",
+  measurementId: "G-9DEDTCBXL0"
 };
 
-// We check if it's running in the sandbox context first, otherwise fallback to your live config
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myFirebaseConfig;
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'funfinity-production';
 const ADMIN_EMAIL = 'tilakdongare064@gmail.com';
@@ -30,12 +27,11 @@ export default function FunfinityApp() {
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState('guest'); 
   const [events, setEvents] = useState([]);
+  const [memories, setMemories] = useState([]);
   const [currentView, setCurrentView] = useState('home'); 
   const [loading, setLoading] = useState(true);
   
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState('login');
-  const [authForm, setAuthForm] = useState({ email: '', password: '' });
   const [authError, setAuthError] = useState('');
   
   const [showPaymentModal, setShowPaymentModal] = useState(null); 
@@ -49,6 +45,10 @@ export default function FunfinityApp() {
   const [announcement, setAnnouncement] = useState("✨ Welcome to Funfinity! The ultimate social club in Belagavi. Join our WhatsApp group!");
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
 
+  /* Custom Toast / Notification State */
+  const [toast, setToast] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
+
   const vibes = ['All', 'Chill', 'High Energy', 'Deep Conversations', 'Creative', 'Food & Drink'];
 
   const [locationSearchQuery, setLocationSearchQuery] = useState('');
@@ -58,6 +58,15 @@ export default function FunfinityApp() {
   const [newEvent, setNewEvent] = useState({
     title: '', date: '', time: '', venue: '', mapLink: '', price: '', upiId: '', description: '', vibe: 'Chill', imageUrl: ''
   });
+
+  const [newMemory, setNewMemory] = useState({
+    title: '', url: '', type: 'image'
+  });
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   useEffect(() => {
     const initAuth = async () => {
@@ -88,40 +97,40 @@ export default function FunfinityApp() {
 
   useEffect(() => {
     if (!user) return;
+    
+    // Fetch Events
     const eventsRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
     const unsubscribeEvents = onSnapshot(eventsRef, (snapshot) => {
       const fetchedEvents = [];
       snapshot.forEach(doc => fetchedEvents.push({ id: doc.id, ...doc.data() }));
-      // Sort by creation time newest first
       setEvents(fetchedEvents.sort((a, b) => b.createdAt - a.createdAt));
       setLoading(false);
     }, (error) => {
       console.error("Error fetching events:", error);
       setLoading(false);
     });
-    return () => unsubscribeEvents();
-  }, [user]);
 
-  const handleEmailAuth = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    try {
-      if (authMode === 'login') {
-        await signInWithEmailAndPassword(auth, authForm.email, authForm.password);
-      } else {
-        await createUserWithEmailAndPassword(auth, authForm.email, authForm.password);
-      }
-      setShowAuthModal(false);
-      setAuthForm({ email: '', password: '' });
-    } catch (err) {
-      setAuthError(err.message.replace('Firebase:', '').trim());
-    }
-  };
+    // Fetch Memories
+    const memoriesRef = collection(db, 'artifacts', appId, 'public', 'data', 'memories');
+    const unsubscribeMemories = onSnapshot(memoriesRef, (snapshot) => {
+      const fetchedMemories = [];
+      snapshot.forEach(doc => fetchedMemories.push({ id: doc.id, ...doc.data() }));
+      setMemories(fetchedMemories.sort((a, b) => b.createdAt - a.createdAt));
+    }, (error) => {
+      console.error("Error fetching memories:", error);
+    });
+
+    return () => {
+      unsubscribeEvents();
+      unsubscribeMemories();
+    };
+  }, [user]);
 
   const handleGoogleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
       setShowAuthModal(false);
+      showToast("Successfully logged in! Welcome to Funfinity.");
     } catch (err) {
       setAuthError(err.message.replace('Firebase:', '').trim());
     }
@@ -129,9 +138,9 @@ export default function FunfinityApp() {
 
   const handleLogout = async () => {
     await signOut(auth);
-    // Fall back to anonymous for browsing
     await signInAnonymously(auth); 
     setCurrentView('home');
+    showToast("You have been logged out.");
   };
 
   const searchOSMLocation = async (query) => {
@@ -143,6 +152,7 @@ export default function FunfinityApp() {
       setLocationResults(data);
     } catch (err) {
       console.error("Location search failed", err);
+      showToast("Failed to search map. Try again.", "error");
     }
     setIsSearchingLocation(false);
   };
@@ -150,18 +160,15 @@ export default function FunfinityApp() {
   const initiateRSVP = (event) => {
     const isAttending = event.attendees?.some(a => a.uid === user?.uid);
     if (isAttending) {
-      // Logic to cancel RSVP would go here
-      alert("You are already booked for this event!");
+      showToast("You are already booked for this event!", "error");
       return;
     } 
     
-    // Check if user is anonymous (needs to login or use guest checkout)
     if (!user || user.isAnonymous) {
       setShowGuestModal(event);
       return;
     }
 
-    // Authenticated user
     if (event.price && parseInt(event.price) > 0 && event.upiId) {
       setShowPaymentModal({ event, attendeeData: { uid: user.uid, name: user.displayName || user.email || 'Verified User', type: 'user' } });
     } else {
@@ -196,20 +203,72 @@ export default function FunfinityApp() {
       });
       setShowPaymentModal(null);
       setGuestForm({ name: '', phone: '' });
-      alert("Successfully booked! Check your WhatsApp/Email for details.");
+      showToast("Successfully booked! Check your WhatsApp/Email for details.");
     } catch (err) {
       console.error("RSVP failed", err);
+      showToast("Booking failed. Please try again.", "error");
     }
   };
 
-  const handleDeleteEvent = async (eventId) => {
-    if (window.confirm("Are you sure you want to delete this event?")) {
-      try {
-        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId));
-      } catch (err) {
-        console.error("Delete failed", err);
+  const safeDeleteEvent = (eventId) => {
+    setConfirmModal({
+      title: "Delete Event",
+      message: "Are you sure you want to permanently delete this event?",
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId));
+          showToast("Event deleted successfully.");
+        } catch (err) {
+          showToast("Failed to delete.", "error");
+        }
+        setConfirmModal(null);
       }
+    });
+  };
+
+  const safeDeleteMemory = (memoryId) => {
+    setConfirmModal({
+      title: "Delete Memory",
+      message: "Are you sure you want to remove this media from the Memory Wall?",
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'memories', memoryId));
+          showToast("Memory deleted successfully.");
+        } catch (err) {
+          showToast("Failed to delete.", "error");
+        }
+        setConfirmModal(null);
+      }
+    });
+  };
+
+  const handleMemorySubmit = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    let finalUrl = newMemory.url;
+
+    // Convert standard YouTube URLs to embed URLs for iFrames
+    if (newMemory.type === 'video' && finalUrl.includes('youtube.com/watch?v=')) {
+      const videoId = new URL(finalUrl).searchParams.get("v");
+      finalUrl = `https://www.youtube.com/embed/${videoId}`;
+    } else if (newMemory.type === 'video' && finalUrl.includes('youtu.be/')) {
+      const videoId = finalUrl.split('youtu.be/')[1].split('?')[0];
+      finalUrl = `https://www.youtube.com/embed/${videoId}`;
     }
+
+    try {
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'memories'), {
+        title: newMemory.title,
+        url: finalUrl,
+        type: newMemory.type,
+        createdAt: Date.now()
+      });
+      showToast("Memory added to the Wall!");
+      setNewMemory({ title: '', url: '', type: 'image' });
+    } catch (err) {
+      showToast("Failed to post memory.", "error");
+    }
+    setIsSubmitting(false);
   };
 
   const Logo = ({ size = 45 }) => (
@@ -240,11 +299,12 @@ export default function FunfinityApp() {
         )}
       </div>
 
+      {/* Hero Section */}
       <section className="min-h-[85vh] flex flex-col justify-center items-center text-center px-4 relative overflow-hidden pt-12 pb-20" style={{ backgroundImage: "radial-gradient(circle at center, rgba(212,136,71,0.05) 0%, transparent 70%)" }}>
         <div className="absolute top-1/4 left-10 w-72 h-72 bg-orange-300 rounded-full mix-blend-multiply filter blur-[80px] opacity-30 animate-blob"></div>
         <div className="absolute top-1/3 right-10 w-72 h-72 bg-yellow-200 rounded-full mix-blend-multiply filter blur-[80px] opacity-30 animate-blob animation-delay-2000"></div>
 
-        <div className="z-10 max-w-5xl mx-auto flex flex-col items-center">
+        <div className="z-10 max-w-5xl mx-auto flex flex-col items-center mt-10">
           <div className="inline-block bg-white/60 backdrop-blur-md border border-[#D48847]/20 rounded-full px-5 py-2 mb-8 shadow-sm flex items-center gap-2 hover:scale-105 transition-transform cursor-default">
             <MapPin size={16} className="text-[#D48847] animate-bounce" />
             <span className="text-[#4A3B32] font-bold text-sm tracking-wide">Belagavi's Premium Social Club</span>
@@ -263,23 +323,67 @@ export default function FunfinityApp() {
             <button onClick={() => setCurrentView('discover')} className="bg-[#4A3B32] text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-black transition-all shadow-xl hover:-translate-y-1 flex items-center justify-center gap-2 group">
               <Search size={20} className="group-hover:rotate-12 transition-transform" /> Explore Events
             </button>
-            <button onClick={() => { userRole !== 'guest' ? setCurrentView('profile') : setShowAuthModal(true) }} className="bg-white text-[#4A3B32] border-2 border-[#F3E8D8] px-8 py-4 rounded-full font-bold text-lg hover:border-[#D48847] hover:bg-orange-50 transition-all shadow-sm flex items-center justify-center gap-2">
-              <User size={20} /> {userRole !== 'guest' ? 'My Dashboard' : 'Join the Club'}
+            <button onClick={() => { userRole !== 'guest' ? setCurrentView('create') : setShowAuthModal(true) }} className="bg-white text-[#4A3B32] border-2 border-[#F3E8D8] px-8 py-4 rounded-full font-bold text-lg hover:border-[#D48847] hover:bg-orange-50 transition-all shadow-sm flex items-center justify-center gap-2">
+              <User size={20} /> {userRole !== 'guest' ? 'Host an Event' : 'Join the Club'}
             </button>
           </div>
+        </div>
+      </section>
 
-          {/* Social Proof & Vibe Wall */}
-          <div className="w-full max-w-4xl mx-auto border-t border-gray-200 pt-10">
-             <div className="flex items-center justify-center gap-2 mb-8">
-                <i className="fab fa-instagram text-xl text-[#D48847]"></i>
-                <p className="text-sm font-bold text-gray-500 uppercase tracking-widest">Our Vibe Wall @funfinity.social</p>
-             </div>
-             
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <img src="https://images.unsplash.com/photo-1523580494863-6f3031224c94?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" className="rounded-2xl h-48 w-full object-cover shadow-sm hover:scale-105 transition-transform duration-300" alt="Vibe 1"/>
-                <img src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" className="rounded-2xl h-48 w-full object-cover shadow-sm hover:scale-105 transition-transform duration-300 md:-translate-y-4" alt="Vibe 2"/>
-                <img src="https://images.unsplash.com/photo-1528605248644-14dd04022da1?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" className="rounded-2xl h-48 w-full object-cover shadow-sm hover:scale-105 transition-transform duration-300 md:translate-y-4" alt="Vibe 3"/>
-                <img src="https://images.unsplash.com/photo-1543807535-eceef0bc6599?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80" className="rounded-2xl h-48 w-full object-cover shadow-sm hover:scale-105 transition-transform duration-300" alt="Vibe 4"/>
+      {/* The Memory Wall Section (Admin-uploaded Media) */}
+      {memories.length > 0 && (
+        <section className="py-24 bg-white border-y border-[#F3E8D8]">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <h2 className="text-4xl md:text-5xl font-bold text-[#4A3B32] mb-4">The Memory Wall</h2>
+              <p className="text-xl text-gray-500 font-medium">Unforgettable moments from our recent gatherings.</p>
+            </div>
+            
+            <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 space-y-6">
+              {memories.map((memory) => (
+                <div key={memory.id} className="break-inside-avoid relative rounded-3xl overflow-hidden shadow-lg border border-gray-100 group">
+                  {memory.type === 'video' ? (
+                    <div className="aspect-w-16 aspect-h-9 relative">
+                      <iframe src={memory.url} title={memory.title} className="w-full h-64 object-cover" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
+                      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-black shadow-sm flex items-center gap-1">
+                        <PlayCircle size={14} className="text-red-500"/> Video Highlight
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <img src={memory.url} alt={memory.title} className="w-full object-cover group-hover:scale-105 transition-transform duration-700" loading="lazy" />
+                      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-black shadow-sm flex items-center gap-1">
+                        <Camera size={14} className="text-[#D48847]"/> Memory
+                      </div>
+                    </div>
+                  )}
+                  <div className="p-4 bg-white">
+                    <p className="font-bold text-[#4A3B32] text-sm">{memory.title}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Featured Vibe Diagram */}
+      <section className="py-24 bg-[#FDFBF7] px-4">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center gap-12">
+          <div className="flex-1">
+             <h2 className="text-4xl font-bold text-[#4A3B32] mb-6">More than a community. A place that feels like home.</h2>
+             <p className="text-lg text-gray-600 mb-8 font-medium">We created Funfinity to bring real connections back to the real world. No swiping, just showing up and sharing a laugh.</p>
+             <ul className="space-y-4">
+               <li className="flex gap-4 items-start"><CheckCircle className="text-green-500 shrink-0 mt-1"/> <span className="font-bold text-[#4A3B32]">Real People, Good Vibes.</span></li>
+               <li className="flex gap-4 items-start"><CheckCircle className="text-green-500 shrink-0 mt-1"/> <span className="font-bold text-[#4A3B32]">Safe, Verified Hosts.</span></li>
+               <li className="flex gap-4 items-start"><CheckCircle className="text-green-500 shrink-0 mt-1"/> <span className="font-bold text-[#4A3B32]">Memories that matter.</span></li>
+             </ul>
+          </div>
+          <div className="flex-1 flex justify-center">
+             <div className="w-64 h-64 bg-[#F3E8D8] rounded-full flex items-center justify-center shadow-xl border-8 border-white relative animate-pulse" style={{animationDuration: '4s'}}>
+                <Logo size={120} />
+                <div className="absolute -top-4 -right-4 bg-white px-4 py-2 rounded-full shadow-md font-bold text-sm text-[#D48847] rotate-12">Connect.</div>
+                <div className="absolute -bottom-4 -left-4 bg-white px-4 py-2 rounded-full shadow-md font-bold text-sm text-[#4A3B32] -rotate-12">Belong.</div>
              </div>
           </div>
         </div>
@@ -297,6 +401,48 @@ export default function FunfinityApp() {
     return (
       <div className="space-y-8 animate-in fade-in duration-500 pb-20 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
         
+        {/* Special Strangers Meetup Hero Banner */}
+        <div className="bg-[#FFF9F2] rounded-[2.5rem] border-2 border-[#D48847]/20 p-6 md:p-10 shadow-lg relative overflow-hidden flex flex-col md:flex-row gap-8 items-center mb-10">
+          <div className="flex-1 z-10 w-full">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="bg-[#D48847] text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-widest animate-pulse">Featured Event</span>
+            </div>
+            <h1 className="text-5xl md:text-6xl font-bold text-[#4A3B32] mb-2 tracking-tight">STRANGERS</h1>
+            <h1 className="text-5xl md:text-6xl font-bold text-[#D48847] mb-4 tracking-tight flex items-center gap-4">
+              MEETUP <Sparkles className="text-[#D48847]" size={40} />
+            </h1>
+            <p className="text-xl text-[#4A3B32]/80 italic mb-6 font-medium">"New people, real conversations, endless fun!"</p>
+            
+            <div className="flex flex-wrap gap-4 mb-8">
+              <div className="bg-[#F3E8D8] text-[#4A3B32] px-4 py-2 rounded-full font-bold flex items-center gap-2 shadow-sm">
+                <MapPin size={18} className="text-[#D48847]" /> La Casa Cafe, Belagavi
+              </div>
+              <div className="bg-[#4A3B32] text-white px-5 py-2 rounded-full font-bold flex items-center gap-2 shadow-md">
+                 Entry Fee: ₹150
+              </div>
+            </div>
+
+            <div className="space-y-4 mb-8">
+              <div className="flex gap-4 items-start bg-white/60 p-4 rounded-2xl border border-white shadow-sm">
+                <div className="w-12 h-12 bg-[#4A3B32] text-[#F3E8D8] rounded-full flex items-center justify-center shrink-0 shadow-md">
+                  <Coffee size={24} />
+                </div>
+                <div>
+                  <h4 className="font-bold text-[#4A3B32]">COFFEE ON US!</h4>
+                  <p className="text-sm text-[#4A3B32]/70">A warm cup of coffee to get you started.</p>
+                </div>
+              </div>
+            </div>
+            
+            <a href="https://chat.whatsapp.com/KNHPGQzwqtr4nWBIQcZyXH" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto bg-gradient-to-r from-[#D48847] to-[#e09b5f] hover:from-[#4A3B32] hover:to-[#2c221c] text-white px-8 py-4 rounded-full font-bold shadow-xl transition-all flex items-center justify-center gap-3 text-lg">
+              <Navigation size={20} /> Join WhatsApp for Details
+            </a>
+          </div>
+          <div className="flex-1 relative z-10 w-full h-[400px] md:h-auto rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white">
+            <img src="https://images.unsplash.com/photo-1528605248644-14dd04022da1?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80" alt="Strangers Meetup" className="w-full h-full object-cover hover:scale-105 transition-transform duration-700" />
+          </div>
+        </div>
+
         {/* Marketplace Header & Search */}
         <div className="bg-white rounded-3xl p-6 border border-[#F3E8D8] shadow-sm mb-8 flex flex-col md:flex-row gap-4 items-center justify-between">
            <div>
@@ -379,16 +525,14 @@ export default function FunfinityApp() {
                         </div>
                       </div>
                       
-                      {userRole === 'admin' ? (
-                        <button onClick={() => handleDeleteEvent(event.id)} className="text-red-500 hover:text-red-700 font-bold text-xs bg-red-50 px-3 py-1 rounded-md">Delete Event</button>
-                      ) : isHost ? (
+                      {isHost ? (
                         <span className="bg-gray-100 text-gray-600 px-4 py-2 rounded-xl font-bold text-sm">Managing</span>
                       ) : isAttending ? (
                         <button className="bg-green-50 text-green-700 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-1 border border-green-200">
                            <Ticket size={16} /> Booked
                         </button>
                       ) : (
-                        <button onClick={() => initiateRSVP(event)} className="bg-[#4A3B32] hover:bg-black text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md hover:shadow-lg flex items-center gap-2">
+                        <button onClick={() => initiateRSVP(event)} className="bg-[#4A3B32] hover:bg-black text-white px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-md flex items-center gap-2">
                           Get Ticket
                         </button>
                       )}
@@ -404,8 +548,6 @@ export default function FunfinityApp() {
   };
 
   const renderCreateEvent = () => {
-    // Only Admin or Verified Users can create events automatically. 
-    // For this app, we will let logged-in users access the form, but prompt guests to login.
     if (!user || user.isAnonymous) {
       return (
         <div className="py-24 text-center max-w-lg mx-auto px-4">
@@ -437,9 +579,9 @@ export default function FunfinityApp() {
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), eventData);
         setCurrentView('discover');
         setNewEvent({ title: '', date: '', time: '', venue: '', mapLink: '', price: '', upiId: '', description: '', vibe: 'Chill', imageUrl: '' });
+        showToast("Event published successfully!");
       } catch (err) {
-        console.error("Failed to create event", err);
-        alert("Failed to create event. Please ensure Firebase is configured.");
+        showToast("Failed to create event.", "error");
       }
       setIsSubmitting(false);
     };
@@ -476,7 +618,7 @@ export default function FunfinityApp() {
              <div className="flex gap-2 relative">
                 <input type="text" placeholder="Search cafes, landmarks..." value={locationSearchQuery} onChange={e => setLocationSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), searchOSMLocation(locationSearchQuery))} className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-400 outline-none bg-white text-sm font-medium" />
                 <button type="button" onClick={() => searchOSMLocation(locationSearchQuery)} className="bg-blue-500 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-600 transition-colors shadow-sm whitespace-nowrap">
-                  {isSearchingLocation ? 'Searching...' : 'Search Maps'}
+                  {isSearchingLocation ? 'Searching...' : 'Search'}
                 </button>
              </div>
              
@@ -484,7 +626,6 @@ export default function FunfinityApp() {
                 <div className="bg-white border border-gray-200 rounded-xl shadow-md overflow-hidden z-10">
                    {locationResults.map((loc, idx) => (
                       <div key={idx} onClick={() => {
-                         // Generate standard Google Maps Link
                          const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lon}`;
                          setNewEvent({...newEvent, venue: loc.display_name.split(',')[0] + ', ' + (loc.display_name.split(',')[1]||''), mapLink: googleMapsUrl});
                          setLocationResults([]); setLocationSearchQuery('');
@@ -509,7 +650,7 @@ export default function FunfinityApp() {
 
           <div className="bg-green-50/30 p-6 rounded-2xl border border-green-100 space-y-4">
              <h3 className="font-bold text-[#4A3B32] flex items-center gap-2"><QrCode size={18} className="text-green-600"/> 3. Ticketing & Direct UPI</h3>
-             <p className="text-xs text-gray-500 font-medium">Set a price and provide your UPI ID. We automatically generate a QR code for buyers to pay you directly. 0% Commission.</p>
+             <p className="text-xs text-gray-500 font-medium">Set a price and provide your UPI ID. We generate a QR code for buyers to pay you directly. 0% Commission.</p>
              <div className="grid grid-cols-2 gap-4">
                 <div>
                    <label className="block text-sm font-bold text-gray-700 mb-1">Ticket Price (₹)</label>
@@ -517,7 +658,7 @@ export default function FunfinityApp() {
                 </div>
                 <div>
                    <label className="block text-sm font-bold text-gray-700 mb-1">Your UPI ID</label>
-                   <input type="text" placeholder="e.g., phone@paytm or name@okicici" value={newEvent.upiId} onChange={e => setNewEvent({...newEvent, upiId: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-400 outline-none bg-white font-medium" />
+                   <input type="text" placeholder="e.g., phone@paytm" value={newEvent.upiId} onChange={e => setNewEvent({...newEvent, upiId: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-green-400 outline-none bg-white font-medium" />
                 </div>
              </div>
           </div>
@@ -532,9 +673,8 @@ export default function FunfinityApp() {
                    </select>
                 </div>
                 <div>
-                   <label className="block text-sm font-bold text-gray-700 mb-1">Image URL</label>
+                   <label className="block text-sm font-bold text-gray-700 mb-1">Cover Image URL</label>
                    <input type="url" placeholder="Paste Unsplash or Image link..." value={newEvent.imageUrl} onChange={e => setNewEvent({...newEvent, imageUrl: e.target.value})} className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#D48847] outline-none bg-white text-sm" />
-                   <p className="text-[10px] text-gray-400 mt-1">*To fetch auto-photos from Maps requires Paid Google API. Paste free links here.</p>
                 </div>
              </div>
              <div>
@@ -543,7 +683,7 @@ export default function FunfinityApp() {
              </div>
           </div>
 
-          <button type="submit" disabled={isSubmitting} className="w-full bg-[#4A3B32] text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition-all shadow-xl hover:-translate-y-1 disabled:opacity-50 disabled:hover:translate-y-0">
+          <button type="submit" disabled={isSubmitting} className="w-full bg-[#4A3B32] text-white py-4 rounded-xl font-bold text-lg hover:bg-black transition-all shadow-xl disabled:opacity-50">
             {isSubmitting ? 'Publishing Event...' : '🚀 Publish Event Live'}
           </button>
         </form>
@@ -551,9 +691,104 @@ export default function FunfinityApp() {
     );
   };
 
+  const renderAdmin = () => {
+    if (userRole !== 'admin') return <div className="p-20 text-center font-bold text-xl text-red-500">Access Denied. Admins Only.</div>;
+
+    return (
+      <div className="max-w-6xl mx-auto w-full px-4 space-y-8 pb-20 animate-in fade-in duration-500 mt-8">
+        <div className="bg-[#4A3B32] rounded-3xl p-8 text-white shadow-xl flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2 flex items-center gap-2"><ShieldAlert size={28} className="text-[#D48847]"/> Admin Command Center</h1>
+            <p className="text-[#F3E8D8]">Manage events, photos, and platform settings globally.</p>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* Add to Memory Wall Panel */}
+          <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm">
+            <h2 className="text-xl font-bold text-[#4A3B32] mb-4 flex items-center gap-2"><Camera size={20}/> Post to Memory Wall</h2>
+            <form onSubmit={handleMemorySubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Title / Description</label>
+                <input required type="text" placeholder="e.g., Epic Saturday Jam!" value={newMemory.title} onChange={e => setNewMemory({...newMemory, title: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-gray-50" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Media Type</label>
+                  <select value={newMemory.type} onChange={e => setNewMemory({...newMemory, type: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-gray-50">
+                    <option value="image">Image / Photo</option>
+                    <option value="video">YouTube Video</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Direct URL Link</label>
+                  <input required type="url" placeholder="https://..." value={newMemory.url} onChange={e => setNewMemory({...newMemory, url: e.target.value})} className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none bg-gray-50" />
+                </div>
+              </div>
+              <button type="submit" disabled={isSubmitting} className="w-full bg-[#D48847] text-white py-3 rounded-xl font-bold hover:bg-[#b5733b] transition-colors">
+                Publish to Home Page
+              </button>
+            </form>
+          </div>
+
+          {/* Manage Memories Panel */}
+          <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-96">
+            <h2 className="text-xl font-bold text-[#4A3B32] mb-4">Manage Memory Wall</h2>
+            <div className="overflow-y-auto flex-1 pr-2 space-y-3">
+              {memories.map(mem => (
+                <div key={mem.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100">
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    {mem.type === 'video' ? <PlayCircle size={24} className="text-red-500 shrink-0"/> : <ImageIcon size={24} className="text-blue-500 shrink-0"/>}
+                    <span className="font-bold text-sm truncate">{mem.title}</span>
+                  </div>
+                  <button onClick={() => safeDeleteMemory(mem.id)} className="p-2 text-red-500 hover:bg-red-100 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                </div>
+              ))}
+              {memories.length === 0 && <p className="text-gray-400 text-sm italic">No memories posted yet.</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* Global Event Management */}
+        <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm overflow-hidden">
+          <h2 className="text-xl font-bold text-[#4A3B32] mb-4 flex items-center gap-2"><Ticket size={20}/> Global Event Management</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-gray-50 text-gray-600 font-bold">
+                <tr>
+                  <th className="p-4 rounded-tl-xl">Event Title</th>
+                  <th className="p-4">Host</th>
+                  <th className="p-4">Date</th>
+                  <th className="p-4">Attendees</th>
+                  <th className="p-4 rounded-tr-xl">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map(event => (
+                  <tr key={event.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                    <td className="p-4 font-bold text-[#4A3B32]">{event.title}</td>
+                    <td className="p-4 text-gray-600">{event.host}</td>
+                    <td className="p-4 text-gray-600">{event.date}</td>
+                    <td className="p-4 font-bold text-[#D48847]">{event.attendees?.length || 0}</td>
+                    <td className="p-4">
+                      <button onClick={() => safeDeleteEvent(event.id)} className="text-red-500 hover:text-red-700 font-bold bg-red-50 px-3 py-1.5 rounded-lg flex items-center gap-1">
+                        <Trash2 size={14}/> Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {events.length === 0 && <p className="text-gray-400 text-sm italic p-4">No active events.</p>}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-[#FDFBF7] font-sans selection:bg-[#D48847] selection:text-white flex flex-col">
-      <nav className={`fixed w-full z-40 transition-all duration-300 ${currentView === 'home' ? 'bg-[#FDFBF7]/80 backdrop-blur-md border-b border-transparent' : 'bg-white border-b border-gray-100 shadow-sm'}`}>
+    <div className="min-h-screen bg-[#FDFBF7] font-sans selection:bg-[#D48847] selection:text-white flex flex-col relative">
+      <nav className={`fixed w-full z-40 transition-all duration-300 ${currentView === 'home' ? 'bg-[#FDFBF7]/90 backdrop-blur-md border-b border-gray-100 shadow-sm' : 'bg-white border-b border-gray-100 shadow-sm'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setCurrentView('home')}>
@@ -565,6 +800,11 @@ export default function FunfinityApp() {
               <button onClick={() => setCurrentView('home')} className={`px-5 py-2 rounded-full font-bold text-sm transition-all ${currentView === 'home' ? 'bg-white shadow-sm text-[#4A3B32]' : 'text-gray-500 hover:text-[#4A3B32]'}`}>Story</button>
               <button onClick={() => setCurrentView('discover')} className={`px-5 py-2 rounded-full font-bold text-sm transition-all ${currentView === 'discover' ? 'bg-white shadow-sm text-[#4A3B32]' : 'text-gray-500 hover:text-[#4A3B32]'}`}>Marketplace</button>
               <button onClick={() => setCurrentView('create')} className={`px-5 py-2 rounded-full font-bold text-sm transition-all ${currentView === 'create' ? 'bg-white shadow-sm text-[#4A3B32]' : 'text-gray-500 hover:text-[#4A3B32]'}`}>Host Experience</button>
+              {userRole === 'admin' && (
+                <button onClick={() => setCurrentView('admin')} className={`px-5 py-2 rounded-full font-bold text-sm transition-all bg-purple-100 text-purple-700 shadow-sm flex items-center gap-1`}>
+                  <ShieldAlert size={14}/> Admin
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
@@ -573,13 +813,8 @@ export default function FunfinityApp() {
               </a>
               {user && !user.isAnonymous ? (
                 <div className="flex items-center gap-3">
-                  {userRole === 'admin' && (
-                    <span className="hidden sm:flex items-center gap-1 bg-purple-100 text-purple-700 px-3 py-1.5 rounded-full font-bold text-xs border border-purple-200">
-                      <Settings size={14} /> Admin
-                    </span>
-                  )}
-                  <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 transition-colors p-2"><LogOut size={20}/></button>
-                  <div className="w-10 h-10 rounded-full bg-[#D48847] flex items-center justify-center text-white font-bold border-2 border-white shadow-md cursor-pointer hover:scale-105 transition-transform">
+                  <button onClick={handleLogout} className="text-gray-400 hover:text-red-500 transition-colors p-2" title="Log Out"><LogOut size={20}/></button>
+                  <div className="w-10 h-10 rounded-full bg-[#D48847] flex items-center justify-center text-white font-bold border-2 border-white shadow-md cursor-pointer hover:scale-105 transition-transform" title={user.email}>
                     {user.email ? user.email[0].toUpperCase() : 'U'}
                   </div>
                 </div>
@@ -597,9 +832,10 @@ export default function FunfinityApp() {
         {currentView === 'home' && renderHome()}
         {currentView === 'discover' && renderDiscover()}
         {currentView === 'create' && renderCreateEvent()}
+        {currentView === 'admin' && renderAdmin()}
       </main>
 
-      {/* Mobile Bottom Navigation */}
+      {}
       <div className="md:hidden fixed bottom-0 left-0 w-full bg-white/95 backdrop-blur-xl border-t border-gray-200 flex justify-around p-2 z-40 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
         <button onClick={() => setCurrentView('home')} className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-16 ${currentView === 'home' ? 'text-[#D48847]' : 'text-gray-400 hover:text-gray-600'}`}>
           <Home size={22} strokeWidth={currentView === 'home' ? 2.5 : 2} />
@@ -638,7 +874,7 @@ export default function FunfinityApp() {
         </div>
       </footer>
 
-      {}
+      {/* Auth Modal (Google Only) */}
       {showAuthModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] w-full max-w-md overflow-hidden shadow-2xl border border-white/20">
@@ -648,9 +884,9 @@ export default function FunfinityApp() {
                 <button onClick={() => setShowAuthModal(false)} className="text-gray-400 hover:bg-gray-100 p-2 rounded-full transition-colors"><XCircle size={24} /></button>
               </div>
               <h2 className="text-3xl font-bold text-[#4A3B32] mb-2">Join the Club</h2>
-              <p className="text-gray-500 font-medium mb-8">Sign in to book tickets, save your favorite venues, and host events.</p>
+              <p className="text-gray-500 font-medium mb-8">Sign in with Google to book tickets, save your favorite venues, and host events instantly.</p>
               
-              <button onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 font-bold py-4 px-4 rounded-xl hover:bg-gray-50 transition-all mb-4 shadow-sm text-lg">
+              <button onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 font-bold py-4 px-4 rounded-xl hover:bg-gray-50 transition-all shadow-sm text-lg">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6" />
                 Continue with Google
               </button>
@@ -661,6 +897,7 @@ export default function FunfinityApp() {
         </div>
       )}
 
+      {/* Guest Checkout Modal */}
       {showGuestModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col p-6">
@@ -677,14 +914,15 @@ export default function FunfinityApp() {
               <button type="submit" className="w-full bg-[#4A3B32] text-white font-bold py-3 rounded-xl hover:bg-black transition-all shadow-md mt-4">
                 Proceed to Booking
               </button>
-              <button type="button" onClick={() => { setShowGuestModal(null); setShowAuthModal(true); }} className="w-full text-[#D48847] font-bold py-2 text-sm">
-                Wait, I want to Login instead
+              <button type="button" onClick={() => { setShowGuestModal(null); setShowAuthModal(true); }} className="w-full text-[#D48847] font-bold py-2 text-sm hover:underline">
+                Wait, I want to Login with Google instead
               </button>
             </form>
           </div>
         </div>
       )}
 
+      {/* Payment / UPI Display Modal */}
       {showPaymentModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
@@ -710,6 +948,28 @@ export default function FunfinityApp() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Custom Confirmation Modal (replaces window.confirm) */}
+      {confirmModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 className="font-bold text-xl text-[#4A3B32] mb-2">{confirmModal.title}</h3>
+            <p className="text-gray-600 mb-6">{confirmModal.message}</p>
+            <div className="flex gap-4">
+              <button onClick={() => setConfirmModal(null)} className="flex-1 bg-gray-100 text-[#4A3B32] py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors">Cancel</button>
+              <button onClick={confirmModal.onConfirm} className="flex-1 bg-red-500 text-white py-3 rounded-xl font-bold hover:bg-red-600 transition-colors">Yes, Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Toast Notification */}
+      {toast && (
+        <div className={`fixed bottom-20 md:bottom-10 right-4 z-[200] px-6 py-3 rounded-full shadow-xl font-bold text-white text-sm flex items-center gap-2 animate-in slide-in-from-bottom-5 duration-300 ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'}`}>
+          {toast.type === 'error' ? <ShieldAlert size={18}/> : <CheckCircle size={18}/>}
+          {toast.msg}
         </div>
       )}
     </div>
