@@ -13,8 +13,7 @@ const firebaseConfig = {
   projectId: "funfinity-28521",
   storageBucket: "funfinity-28521.firebasestorage.app",
   messagingSenderId: "493685480978",
-  appId: "1:493685480978:web:8b979f65956217e84fc2cb",
-  measurementId: "G-9DEDTCBXL0"
+  appId: "1:493685480978:web:8b979f65956217e84fc2cb"
 };
 
 // We check if it's running in the sandbox context first, otherwise fallback to your live config
