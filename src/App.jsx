@@ -246,6 +246,10 @@ export default function FunfinityApp() {
        showToast("Please enter a valid Instagram URL.", "error");
        return;
     }
+    if (!newIgUrl.includes('/p/') && !newIgUrl.includes('/reel/')) {
+       showToast("Please paste a specific Post or Reel link, not your main profile link!", "error");
+       return;
+    }
     setIsSubmitting(true);
     try {
       await addDoc(collection(db, 'ig_grid'), {
@@ -300,9 +304,11 @@ export default function FunfinityApp() {
     if (!url) return '';
     let embedUrl = url;
     if (embedUrl.includes("instagram.com")) {
-      embedUrl = embedUrl.split("?")[0]; 
-      if (!embedUrl.endsWith("/")) embedUrl += "/";
-      embedUrl += "embed";
+      // Safely extract the exact post/reel ID to bypass browser blocks
+      const match = embedUrl.match(/instagram\.com\/(p|reel)\/([^\/?#]+)/);
+      if (match) {
+        return `https://www.instagram.com/${match[1]}/${match[2]}/embed/`;
+      }
     } else if (embedUrl.includes("watch?v=")) {
       embedUrl = embedUrl.replace("watch?v=", "embed/");
       embedUrl = embedUrl.split("&")[0];
