@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, arrayUnion } from 'firebase/firestore';
-import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, Heart, Star, Navigation, Coffee, Sparkles, X, Image as ImageIcon, Video, AlertCircle, CheckCircle2, ChevronRight, LogOut, LayoutDashboard, Instagram, Youtube, Share2, TrendingUp, Check } from 'lucide-react';
+import { getFirestore, collection, onSnapshot, addDoc, updateDoc, doc, arrayUnion, deleteDoc } from 'firebase/firestore';
+import { MapPin, Calendar, Users, PlusCircle, Home, ShieldCheck, Search, Camera, Heart, Star, Navigation, Coffee, Sparkles, X, Image as ImageIcon, Video, AlertCircle, CheckCircle2, ChevronRight, LogOut, LayoutDashboard, Instagram, Youtube, Share2, TrendingUp, Check, Trash2 } from 'lucide-react';
 
 // --- YOUR REAL FIREBASE CREDENTIALS ---
 const firebaseConfig = {
@@ -28,6 +28,7 @@ export default function FunfinityApp() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [events, setEvents] = useState([]);
   const [memories, setMemories] = useState([]);
+  const [igGrid, setIgGrid] = useState([]); // New Instagram Grid State
   const [currentView, setCurrentView] = useState('home');
   const [loading, setLoading] = useState(true);
   
@@ -47,6 +48,7 @@ export default function FunfinityApp() {
     title: '', date: '', time: '', venue: '', price: '', capacity: '', description: '', vibe: 'Chill', imageUrl: ''
   });
   const [newMemory, setNewMemory] = useState({ type: 'upload', url: '', caption: '' });
+  const [newIgUrl, setNewIgUrl] = useState(''); // Form for IG Grid
 
   // --- HELPER: TOAST NOTIFICATIONS ---
   const showToast = (message, type = 'success') => {
@@ -69,7 +71,7 @@ export default function FunfinityApp() {
 
   // --- CORE: FETCH PUBLIC DATA ---
   useEffect(() => {
-    // Fetch Events
+    // Fetch Events (Safely)
     const unsubscribeEvents = onSnapshot(collection(db, 'events'), (snapshot) => {
       const eventsData = [];
       snapshot.forEach((doc) => eventsData.push({ id: doc.id, ...doc.data() }));
@@ -89,9 +91,19 @@ export default function FunfinityApp() {
       console.error("Memories fetch error:", error);
     });
 
+    // Fetch Instagram Grid
+    const unsubscribeIg = onSnapshot(collection(db, 'ig_grid'), (snapshot) => {
+      const igData = [];
+      snapshot.forEach((doc) => igData.push({ id: doc.id, ...doc.data() }));
+      setIgGrid(igData.sort((a, b) => b.createdAt - a.createdAt));
+    }, (error) => {
+      console.error("IG Grid fetch error:", error);
+    });
+
     return () => {
       unsubscribeEvents();
       unsubscribeMemories();
+      unsubscribeIg();
     };
   }, []);
 
@@ -155,7 +167,7 @@ export default function FunfinityApp() {
       setCurrentView('discover');
       setNewEvent({ title: '', date: '', time: '', venue: '', price: '', capacity: '', description: '', vibe: 'Chill', imageUrl: '' });
     } catch (error) {
-      showToast("Database locked: Ensure Firestore Rules are set.", "error");
+      showToast("Failed to create event. Check database rules.", "error");
     }
     setIsSubmitting(false);
   };
@@ -191,12 +203,12 @@ export default function FunfinityApp() {
     }
   };
 
-  // --- MEMORY WALL HANDLERS ---
+  // --- MEMORY WALL & IG GRID HANDLERS ---
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 1000000) { 
-        showToast("File too large. Please keep images under 1MB, or use an Image URL.", "error");
+      if (file.size > 1500000) { 
+        showToast("File too large. Please keep images under 1.5MB, or use an Image URL.", "error");
         e.target.value = ''; 
         return;
       }
@@ -222,9 +234,40 @@ export default function FunfinityApp() {
       showToast("Memory added successfully!");
       setNewMemory({ type: 'upload', url: '', caption: '' });
     } catch (error) {
-      showToast("Database Error: Check your Firestore Security Rules.", "error");
+      showToast("Error adding memory.", "error");
     }
     setIsSubmitting(false);
+  };
+
+  const handleAddIgGrid = async (e) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+    if (!newIgUrl.includes('instagram.com')) {
+       showToast("Please enter a valid Instagram URL.", "error");
+       return;
+    }
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, 'ig_grid'), {
+        url: newIgUrl,
+        createdAt: Date.now()
+      });
+      showToast("Instagram widget updated!");
+      setNewIgUrl('');
+    } catch (error) {
+      showToast("Error adding link.", "error");
+    }
+    setIsSubmitting(false);
+  };
+
+  const handleDeleteIgGrid = async (id) => {
+     if (!isAdmin) return;
+     try {
+       await deleteDoc(doc(db, 'ig_grid', id));
+       showToast("Link removed from grid.");
+     } catch (error) {
+       showToast("Error deleting link.", "error");
+     }
   };
 
   // Data processing for Past vs Upcoming Events
@@ -246,14 +289,13 @@ export default function FunfinityApp() {
       }
     });
 
-    // Sort upcoming ascending (closest first), past descending (most recent first)
     upcoming.sort((a, b) => new Date(a.date) - new Date(b.date));
     past.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     return { upcomingEvents: upcoming, pastEvents: past };
   }, [events, activeVibeFilter]);
 
-  // Social URL Formatter
+  // Social URL Formatter for iframes
   const getEmbedUrl = (url) => {
     if (!url) return '';
     let embedUrl = url;
@@ -288,7 +330,6 @@ export default function FunfinityApp() {
     const capacity = parseInt(event.capacity) || 0;
     const isFull = capacity > 0 && attendeeCount >= capacity;
     
-    // Generates fake or real avatars for social proof
     const getAvatar = (index) => `https://api.dicebear.com/7.x/avataaars/svg?seed=${event.id}${index}&backgroundColor=F3E8D8`;
 
     return (
@@ -306,7 +347,6 @@ export default function FunfinityApp() {
              </div>
           )}
 
-          {/* Share Button */}
           <button onClick={(e) => { e.stopPropagation(); handleShare(event.title); }} className="absolute bottom-4 right-4 w-10 h-10 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-[#4A3B32] hover:bg-[#D48847] hover:text-white transition-colors shadow-lg">
             <Share2 size={18} />
           </button>
@@ -328,7 +368,6 @@ export default function FunfinityApp() {
           
           <p className="text-sm text-gray-600 mb-6 line-clamp-2 flex-grow">{event.description}</p>
           
-          {/* Luma-style Attendees & Capacity */}
           <div className="flex justify-between items-end mb-4">
             <div className="flex -space-x-2 overflow-hidden">
                {Array.from({ length: Math.min(attendeeCount === 0 ? 1 : attendeeCount, 3) }).map((_, i) => (
@@ -350,7 +389,6 @@ export default function FunfinityApp() {
             )}
           </div>
 
-          {/* Host Analytics (Only visible to admins/hosts) */}
           {(isAdmin || isHost) && (
              <div className="bg-[#FDFBF7] rounded-xl p-3 mb-4 border border-[#F3E8D8] flex justify-between items-center text-xs">
                 <div className="font-bold text-[#4A3B32] flex items-center gap-1"><TrendingUp size={14} className="text-green-500"/> Host Stats</div>
@@ -428,7 +466,7 @@ export default function FunfinityApp() {
         </div>
       </section>
 
-      {/* Modern Memory Wall */}
+      {/* Memory Wall */}
       <section className="py-24 px-4 bg-white border-t border-[#F3E8D8]">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-end mb-12">
@@ -471,6 +509,44 @@ export default function FunfinityApp() {
           )}
         </div>
       </section>
+
+      {/* NEW: Instagram Live Grid Section */}
+      <section className="py-24 px-4 bg-[#FDFBF7] border-t border-[#F3E8D8]">
+         <div className="max-w-7xl mx-auto">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-12">
+               <div className="text-center md:text-left">
+                 <h2 className="text-4xl font-extrabold tracking-tight text-[#4A3B32] mb-2 flex items-center justify-center md:justify-start gap-3">
+                    <Instagram className="text-[#D48847]" size={36}/> Live on Instagram
+                 </h2>
+                 <p className="text-[#4A3B32]/70 font-medium text-lg">@funfinity.social</p>
+               </div>
+               <a href="https://www.instagram.com/funfinity.social" target="_blank" rel="noopener noreferrer" className="mt-6 md:mt-0 bg-[#4A3B32] text-white px-8 py-3 rounded-full font-bold hover:bg-[#2c221c] transition-all shadow-md flex items-center gap-2">
+                 Follow Us <ChevronRight size={16}/>
+               </a>
+            </div>
+
+            {igGrid.length === 0 ? (
+               <div className="text-center py-20 bg-white rounded-[2rem] border border-[#F3E8D8]">
+                  <Instagram size={40} className="mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-500 font-medium">No Instagram posts linked yet.</p>
+                  {isAdmin && <p className="text-sm text-[#D48847] mt-2">Go to Admin Zone to add posts!</p>}
+               </div>
+            ) : (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                 {igGrid.map(post => (
+                    <div key={post.id} className="bg-white rounded-3xl overflow-hidden shadow-md border border-[#F3E8D8] aspect-[4/5] relative">
+                       <iframe 
+                           src={getEmbedUrl(post.url)} 
+                           className="absolute top-0 left-0 w-full h-full border-0" 
+                           allowFullScreen
+                           scrolling="no"
+                        ></iframe>
+                    </div>
+                 ))}
+               </div>
+            )}
+         </div>
+      </section>
     </div>
   );
 
@@ -492,7 +568,7 @@ export default function FunfinityApp() {
         ) : (
           <div className="space-y-16">
             
-            {/* UPCOMING EVENTS SECTION */}
+            {/* UPCOMING EVENTS */}
             <div>
                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8">
                  <div>
@@ -517,7 +593,7 @@ export default function FunfinityApp() {
                )}
             </div>
 
-            {/* PAST EVENTS SECTION */}
+            {/* PAST EVENTS */}
             {pastEvents.length > 0 && (
                <div>
                   <div className="mb-8 border-t border-[#F3E8D8] pt-12">
@@ -617,11 +693,13 @@ export default function FunfinityApp() {
            <LayoutDashboard className="text-white" size={32} />
         </div>
         <h2 className="text-3xl font-extrabold tracking-tight text-[#4A3B32] mb-2">Command Center</h2>
-        <p className="text-[#4A3B32]/70 font-medium">Update the Memory Wall directly.</p>
+        <p className="text-[#4A3B32]/70 font-medium">Update platform content securely.</p>
       </div>
 
-      <div className="bg-[#FDFBF7] p-8 rounded-[2rem] border border-[#F3E8D8]">
-        <h3 className="font-bold text-xl mb-6 text-[#4A3B32] flex items-center gap-2"><Camera className="text-[#D48847]"/> Post to Memory Wall</h3>
+      {/* Memory Wall Publisher */}
+      <div className="bg-[#FDFBF7] p-8 rounded-[2rem] border border-[#F3E8D8] mb-8">
+        <h3 className="font-bold text-xl mb-2 text-[#4A3B32] flex items-center gap-2"><Camera className="text-[#D48847]"/> Feature 1: Post to Memory Wall</h3>
+        <p className="text-sm text-gray-500 mb-6">Upload physical photos or paste links to appear in the main Memories section.</p>
         
         <div className="flex flex-wrap gap-2 mb-6 bg-white p-1.5 rounded-xl border border-[#F3E8D8] w-max max-w-full shadow-sm">
            <button onClick={() => setNewMemory({...newMemory, type: 'upload'})} className={`px-5 py-2.5 text-sm font-bold rounded-lg transition-all ${newMemory.type === 'upload' ? 'bg-[#4A3B32] text-white shadow-md' : 'text-gray-500 hover:bg-[#F3E8D8]'}`}>Upload Photo</button>
@@ -634,7 +712,7 @@ export default function FunfinityApp() {
         <form onSubmit={handleAddMemory} className="space-y-5">
           {newMemory.type === 'upload' && (
              <div>
-                <label className="block text-sm font-bold text-[#4A3B32] mb-2">Select File (Max 1MB)</label>
+                <label className="block text-sm font-bold text-[#4A3B32] mb-2">Select File (Max 1.5MB)</label>
                 <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full bg-white px-5 py-4 rounded-2xl border border-gray-200 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-[#F3E8D8] file:text-[#4A3B32] hover:file:bg-[#e8dbc6] transition-all cursor-pointer text-sm font-medium" required />
              </div>
           )}
@@ -657,9 +735,30 @@ export default function FunfinityApp() {
           </div>
           
           <div className="pt-2">
-             <button type="submit" disabled={isSubmitting || !newMemory.url} className="w-full bg-[#D48847] text-white px-6 py-4 rounded-2xl font-bold text-lg hover:bg-[#b87439] disabled:opacity-50 transition-all shadow-md">Publish Memory</button>
+             <button type="submit" disabled={isSubmitting || (!newMemory.url && newMemory.type !== 'upload')} className="w-full bg-[#D48847] text-white px-6 py-4 rounded-2xl font-bold text-lg hover:bg-[#b87439] disabled:opacity-50 transition-all shadow-md">Publish Memory</button>
           </div>
         </form>
+      </div>
+
+      {/* NEW: Instagram Custom Grid Manager */}
+      <div className="bg-[#FDFBF7] p-8 rounded-[2rem] border border-[#F3E8D8]">
+        <h3 className="font-bold text-xl mb-2 text-[#4A3B32] flex items-center gap-2"><Instagram className="text-[#D48847]"/> Feature 2: Instagram Grid</h3>
+        <p className="text-sm text-gray-500 mb-6">Add links to your best Instagram posts. These will appear in the dedicated 3-column grid below the Memory Wall.</p>
+        
+        <form onSubmit={handleAddIgGrid} className="flex gap-2 mb-6">
+           <input type="url" placeholder="Paste Instagram post URL here..." value={newIgUrl} onChange={e => setNewIgUrl(e.target.value)} className="flex-1 px-5 py-3 rounded-xl border border-gray-200 bg-white focus:border-[#4A3B32] outline-none font-medium text-sm" required />
+           <button type="submit" disabled={isSubmitting} className="bg-[#4A3B32] text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-[#2c221c] transition-all disabled:opacity-50 shadow-md whitespace-nowrap">Add to Grid</button>
+        </form>
+
+        <div className="space-y-3">
+           {igGrid.map(post => (
+              <div key={post.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-200 shadow-sm">
+                 <a href={post.url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-500 hover:underline truncate mr-4">{post.url}</a>
+                 <button onClick={() => handleDeleteIgGrid(post.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16}/></button>
+              </div>
+           ))}
+           {igGrid.length === 0 && <p className="text-sm text-gray-400 italic">No posts in the grid yet.</p>}
+        </div>
       </div>
     </div>
   );
